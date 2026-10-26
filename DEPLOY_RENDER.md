@@ -54,6 +54,40 @@ git push -u origin main
 
 ---
 
+## 2-1. 무료 플랜 슬립 방지 (5분 핑)
+
+Render 무료 웹 서비스는 **15분 동안 요청이 없으면 슬립**합니다.
+이 앱은 `RENDER_EXTERNAL_URL` 이 있으면 **5분마다 자기 자신의 `/api/ping` 을 호출**해 슬립을 막습니다.
+(별도 설정 없이 자동, Render가 넣어 주는 환경변수 사용)
+
+- `render.yaml` 의 `KEEP_ALIVE=1` 이 스위치입니다. `0` 으로 바꾸면 꺼집니다.
+- 배포 로그에 아래 줄이 보이면 정상 동작입니다.
+
+  ```
+  [핑] 슬립 방지 활성 · 300초 간격 · https://apex-shop-xxxx.onrender.com/api/ping
+  [핑] 정상 200 · 42ms · https://apex-shop-xxxx.onrender.com/api/ping
+  ```
+  (성공 로그는 1시간에 한 번만 남기고, 실패는 매번 남깁니다)
+
+| 환경변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `KEEP_ALIVE` | `1` | `0` 이면 핑 끔 |
+| `KEEP_ALIVE_INTERVAL_SECONDS` | `300` | 핑 간격(초). 최소 5 (권장 300) |
+| `KEEP_ALIVE_URL` | `RENDER_EXTERNAL_URL/api/ping` | 직접 지정할 때 |
+
+**요금/한도 주의**
+
+- Free 플랜은 워크스페이스당 **월 750 인스턴스 시간**입니다. 상시 켜 두는 서비스 1개는
+  약 720~744시간이라 한도 안에 들어오지만, **무료 서비스를 2개 이상 상시로 켜면 초과**합니다.
+- Starter 플랜은 슬립이 없으므로 핑이 필요 없습니다 → `KEEP_ALIVE=0` 으로 끄세요(비용·로그 절약).
+- 핑은 서버가 **살아 있을 때만** 동작합니다. Render 쪽 장애/재시작으로 내려간 경우 스스로 깨우지 못하므로,
+  필요하면 **UptimeRobot / cron-job.org** 같은 무료 외부 모니터에
+  `https://<서비스주소>/api/ping` 을 5분 간격으로 등록하세요(가장 확실한 방법).
+- GitHub Actions 의 `schedule: */5` 는 최소 5분이지만 실제로는 수 분 지연되거나
+  60일 저장소 활동이 없으면 자동 비활성화되므로, 보조 수단으로만 쓰세요.
+
+---
+
 ## 3. 수동으로 만들기 (Blueprint 없이)
 
 **New +** → **Web Service** → 저장소 선택 후:

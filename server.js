@@ -223,6 +223,11 @@ async function handlePublicApi(req, res, pathname, query) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/ping') {
+    sendJson(res, 200, { ok: true, time: new Date().toISOString(), uptime: Math.round(process.uptime()) });
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/auth/me') {
     const user = currentUser(req);
     if (!user) throw new store.AppError(401, '로그인이 필요합니다.');
@@ -656,5 +661,44 @@ setInterval(() => {
     console.error('[자동입금확인 오류]', err);
   }
 }, 15000).unref();
+
+/* ────────────────────────────────────────────────────────────
+   무료 플랜 슬립 방지: 5분마다 공개 URL 을 스스로 핑합니다.
+   Render 무료 웹 서비스는 15분간 요청이 없으면 잠들기 때문에,
+   RENDER_EXTERNAL_URL 이 있으면 자동으로 켜집니다.
+   KEEP_ALIVE=0 으로 끄고, KEEP_ALIVE_URL / KEEP_ALIVE_INTERVAL_SECONDS 로 조정합니다.
+   ──────────────────────────────────────────────────────────── */
+const KEEP_ALIVE_ENABLED = process.env.KEEP_ALIVE !== '0';
+/* 최소 5초(테스트용) · 기본 300초(5분) */
+const KEEP_ALIVE_INTERVAL_MS = Math.max(5, Number(process.env.KEEP_ALIVE_INTERVAL_SECONDS) || 300) * 1000;
+const KEEP_ALIVE_TARGET = (process.env.KEEP_ALIVE_URL ||
+  (process.env.RENDER_EXTERNAL_URL ? process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '') + '/api/ping' : '')).trim();
+
+if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
+  let lastOkLog = 0;
+  const ping = async () => {
+    const startedAt = Date.now();
+    try {
+      const res = await fetch(KEEP_ALIVE_TARGET, {
+        headers: { 'user-agent': 'apex-shop-keepalive/1.0' },
+        signal: AbortSignal.timeout(20000)
+      });
+      if (!res.ok) {
+        console.warn('[핑] 응답 ' + res.status + ' · ' + KEEP_ALIVE_TARGET);
+        return;
+      }
+      const now = Date.now();
+      if (now - lastOkLog > 3600000) {
+        console.log('[핑] 정상 ' + res.status + ' · ' + (now - startedAt) + 'ms · ' + KEEP_ALIVE_TARGET);
+        lastOkLog = now;
+      }
+    } catch (err) {
+      console.warn('[핑] 실패 · ' + (err && err.name === 'TimeoutError' ? '시간 초과' : (err && err.message)));
+    }
+  };
+  setTimeout(ping, 2000).unref();
+  setInterval(ping, KEEP_ALIVE_INTERVAL_MS).unref();
+  console.log('[핑] 슬립 방지 활성 · ' + Math.round(KEEP_ALIVE_INTERVAL_MS / 1000) + '초 간격 · ' + KEEP_ALIVE_TARGET);
+}
 
 

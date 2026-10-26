@@ -46,6 +46,10 @@ SQLite 는 Persistent Disk(`/var/data/shop.db`)에 저장하도록 설정되어 
 지원하지 않아 재배포 시 데이터가 초기화됩니다. 절차·체크리스트·문제 해결은
 **[DEPLOY_RENDER.md](DEPLOY_RENDER.md)** 를 참고하세요.
 
+무료 플랜은 15분 무요청 시 슬립되는데, 이 앱은 `RENDER_EXTERNAL_URL` 이 있으면
+**5분마다 `/api/ping` 으로 자기 자신을 호출해 슬립을 막습니다**(`KEEP_ALIVE=0` 으로 해제,
+`KEEP_ALIVE_INTERVAL_SECONDS` 로 간격 변경). 자세한 내용은 배포 가이드의 **2-1 절** 참고.
+
 ## 구매 흐름 (회원 계정)
 
 1. 고객이 **회원가입**(아이디 4~20자 / 비밀번호 6자 이상) 후 로그인합니다. 이메일 입력은 없습니다.

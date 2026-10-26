@@ -21,6 +21,10 @@ services:
       # Blueprint 생성 시 Render 대시보드에서 직접 입력하도록 요청
       - key: ADMIN_PASSWORD
         sync: false
+      # 무료 플랜 슬립 방지: RENDER_EXTERNAL_URL 로 5분마다 자기 자신을 핑
+      # (끄려면 0, 간격 변경은 KEEP_ALIVE_INTERVAL_SECONDS)
+      - key: KEEP_ALIVE
+        value: "1"
     disk:
       name: apex-shop-data
       mountPath: /var/data
