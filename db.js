@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS products (
   price INTEGER NOT NULL DEFAULT 0,
   emoji TEXT NOT NULL DEFAULT '🎮',
   tint TEXT NOT NULL DEFAULT 'violet',
+  image TEXT NOT NULL DEFAULT '',
   stock_mode TEXT NOT NULL DEFAULT 'auto',
   manual_stock INTEGER NOT NULL DEFAULT 0,
   visible INTEGER NOT NULL DEFAULT 1,
@@ -162,6 +163,12 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
   if (names.indexOf('order_id') === -1) db.exec('ALTER TABLE reviews ADD COLUMN order_id INTEGER');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_product ON reviews(user_id, product_id) WHERE user_id IS NOT NULL');
   db.exec('CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id, visible)');
+})();
+
+/* 기존 DB 호환: products.image (상품 이미지) 컬럼 추가 */
+(function ensureProductColumns() {
+  const names = db.prepare('PRAGMA table_info(products)').all().map((column) => column.name);
+  if (names.indexOf('image') === -1) db.exec("ALTER TABLE products ADD COLUMN image TEXT NOT NULL DEFAULT ''");
 })();
 
 db.exec(`
@@ -276,6 +283,7 @@ function mapProduct(row) {
     price: row.price,
     emoji: row.emoji,
     tint: row.tint,
+    image: row.image || '',
     stockMode: row.stock_mode,
     manualStock: row.manual_stock,
     stock: row.stock || 0,
@@ -299,7 +307,24 @@ function getProduct(id) {
   return mapProduct(row);
 }
 
-const PRODUCT_FIELDS = ['game', 'category', 'grade', 'name', 'summary', 'description', 'price', 'emoji', 'tint', 'stock_mode', 'manual_stock', 'visible', 'sort_order'];
+const PRODUCT_FIELDS = ['game', 'category', 'grade', 'name', 'summary', 'description', 'price', 'emoji', 'tint', 'image', 'stock_mode', 'manual_stock', 'visible', 'sort_order'];
+
+/*
+ * 상품 이미지 값 정규화
+ *  - '' (없음)
+ *  - /uploads/<파일명>  ← 관리자 페이지에서 업로드한 이미지
+ *  - https://... 또는 http://...  ← 외부 이미지 주소
+ * 그 외 값(스크립트/상대경로 트래버설 등)은 빈 값으로 떨어뜨립니다.
+ */
+const IMAGE_VALUE_MAX = 600;
+
+function normalizeImage(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw || raw.length > IMAGE_VALUE_MAX) return '';
+  if (/^\/uploads\/[A-Za-z0-9._-]+$/.test(raw)) return raw;
+  if (/^https?:\/\/[^\s"'<>]+$/i.test(raw)) return raw;
+  return '';
+}
 
 function createProduct(data) {
   const now = nowIso();
@@ -313,6 +338,7 @@ function createProduct(data) {
     price: Math.max(0, Math.round(Number(data.price) || 0)),
     emoji: String(data.emoji || '🎮').slice(0, 8),
     tint: String(data.tint || 'violet').trim() || 'violet',
+    image: normalizeImage(data.image),
     stock_mode: data.stockMode === 'manual' ? 'manual' : 'auto',
     manual_stock: Math.max(0, Math.round(Number(data.manualStock) || 0)),
     visible: data.visible === false ? 0 : 1,
@@ -340,6 +366,7 @@ function updateProduct(id, data) {
     price: data.price === undefined ? current.price : Math.max(0, Math.round(Number(data.price) || 0)),
     emoji: data.emoji === undefined ? current.emoji : String(data.emoji).slice(0, 8) || '🎮',
     tint: data.tint === undefined ? current.tint : String(data.tint).trim() || 'violet',
+    image: data.image === undefined ? current.image : normalizeImage(data.image),
     stock_mode: data.stockMode === undefined ? (current.stockMode === 'manual' ? 'manual' : 'auto') : (data.stockMode === 'manual' ? 'manual' : 'auto'),
     manual_stock: data.manualStock === undefined ? current.manualStock : Math.max(0, Math.round(Number(data.manualStock) || 0)),
     visible: data.visible === undefined ? (current.visible ? 1 : 0) : (data.visible ? 1 : 0),

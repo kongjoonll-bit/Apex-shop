@@ -378,7 +378,11 @@
             return (
               '<div class="table-row' + (product.visible ? '' : ' dim') + '">' +
               '<div class="table-main">' +
-              '<div class="table-thumb tint-' + esc(product.tint) + '">' + esc(product.emoji) + '</div>' +
+              '<div class="table-thumb tint-' + esc(product.tint) + '">' +
+              (product.image
+                ? '<img class="table-thumb-img" src="' + esc(product.image) + '" alt="" loading="lazy">'
+                : esc(product.emoji || '🎮')) +
+              '</div>' +
               '<div class="table-text"><strong>' + esc(product.name) + '</strong>' +
               '<small>' + esc(product.game) + ' · ' + esc(product.category) + ' · ' + esc(product.grade) +
               ' · ' + esc(won(product.price)) + '</small></div></div>' +
@@ -427,6 +431,8 @@
       form.elements.sort_order.value = '100';
       form.elements.manual_stock.value = '0';
       form.elements.visible.value = '1';
+      setProductImage('');
+      imageHint(IMAGE_HINT_DEFAULT);
       return;
     }
     form.elements.game.value = product.game;
@@ -442,8 +448,116 @@
     form.elements.name.value = product.name;
     form.elements.summary.value = product.summary || '';
     form.elements.description.value = product.description || '';
+    setProductImage(product.image || '');
+    imageHint(IMAGE_HINT_DEFAULT);
     form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  /* ---------- 상품 이미지 ---------- */
+  const IMAGE_HINT_DEFAULT = 'JPG · PNG · WebP · GIF / 5MB 이하. 올리면 자동으로 1280px WebP 로 줄여서 저장합니다. 이 영역에 파일을 끌어다 놓아도 됩니다.';
+  const IMAGE_MAX_SIDE = 1280;
+
+  function renderImagePreview(url) {
+    const box = $('productImagePreview');
+    if (!box) return;
+    if (url) {
+      box.classList.remove('is-empty');
+      box.innerHTML = '<img src="' + esc(url) + '" alt="상품 이미지 미리보기">';
+    } else {
+      box.classList.add('is-empty');
+      box.innerHTML = '<span class="image-empty">이미지 없음</span>';
+    }
+  }
+
+  function imageHint(text, tone) {
+    const hint = $('productImageHint');
+    if (!hint) return;
+    hint.textContent = text;
+    hint.classList.toggle('is-error', tone === 'error');
+    hint.classList.toggle('is-ok', tone === 'ok');
+  }
+
+  function setProductImage(url) {
+    const value = String(url || '').trim();
+    const form = $('productForm');
+    if (!form) return;
+    if (form.elements.image) form.elements.image.value = value;
+    /* 업로드된 경로는 URL 입력칸과 겹치지 않게 비워 둡니다. */
+    if (form.elements.image_url && /^\/uploads\//.test(value)) form.elements.image_url.value = '';
+    renderImagePreview(value);
+  }
+
+  function readImageFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error('이미지를 선택해 주세요.'));
+        return;
+      }
+      if (!/^image\//.test(file.type)) {
+        reject(new Error('이미지 파일만 업로드할 수 있습니다.'));
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        reject(new Error('5MB 이하 이미지만 업로드할 수 있습니다.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* 업로드 전에 브라우저에서 1280px / WebP 로 줄여 전송합니다. */
+  async function compressImage(dataUrl, file) {
+    const image = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('이미지를 불러오지 못했습니다.'));
+      el.src = dataUrl;
+    });
+    const natural = Math.max(image.naturalWidth || 1, image.naturalHeight || 1);
+    const scale = Math.min(1, IMAGE_MAX_SIDE / natural);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    try {
+      const webp = canvas.toDataURL('image/webp', 0.86);
+      if (webp.indexOf('data:image/webp') === 0) return webp;
+    } catch (err) {
+      /* WebP 를 지원하지 않는 브라우저는 아래로 */
+    }
+    return canvas.toDataURL('image/jpeg', 0.86);
+  }
+
+  async function uploadProductImage(file) {
+    const button = $('productImagePick');
+    const drop = $('productImageDrop');
+    if (button) button.disabled = true;
+    if (drop) drop.classList.add('is-busy');
+    imageHint('이미지를 올리는 중…');
+    try {
+      const raw = await readImageFile(file);
+      const compressed = await compressImage(raw, file);
+      const result = await api('/api/admin/uploads', { method: 'POST', body: { name: file.name, data: compressed } });
+      const form = $('productForm');
+      if (form && form.elements.image_url) form.elements.image_url.value = '';
+      setProductImage(result.url);
+      const kb = Math.max(1, Math.round((result.bytes || 0) / 1024));
+      imageHint('업로드 완료 · ' + kb + 'KB (자동 축소됨). 상품 저장을 눌러 반영하세요.', 'ok');
+      toast('이미지를 올렸습니다.', 'ok');
+    } catch (err) {
+      imageHint(err.message, 'error');
+      toast(err.message, 'error');
+    } finally {
+      if (button) button.disabled = false;
+      if (drop) drop.classList.remove('is-busy');
+    }
+  }
+
 
   async function submitProduct(form) {
     const fields = form.elements;
@@ -457,6 +571,7 @@
       price: Number(fields.price.value) || 0,
       emoji: fields.emoji.value.trim(),
       tint: fields.tint.value,
+      image: (fields.image_url.value.trim() || fields.image.value.trim()),
       stockMode: fields.stock_mode.value,
       manualStock: Number(fields.manual_stock.value) || 0,
       sortOrder: Number(fields.sort_order.value) || 0,
@@ -876,6 +991,52 @@
       submitProduct(event.target);
     });
     $('productReset').addEventListener('click', () => fillProductForm(null));
+
+    const imagePick = $('productImagePick');
+    const imageFile = $('productImageFile');
+    const imageDrop = $('productImageDrop');
+    if (imagePick && imageFile) {
+      imagePick.addEventListener('click', () => imageFile.click());
+      imageFile.addEventListener('change', (event) => {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (file) uploadProductImage(file);
+      });
+    }
+    if ($('productImageClear')) {
+      $('productImageClear').addEventListener('click', () => {
+        const form = $('productForm');
+        if (form && form.elements.image_url) form.elements.image_url.value = '';
+        setProductImage('');
+        imageHint('이미지를 제거했습니다. 저장하면 이모지로 표시됩니다.', 'ok');
+      });
+    }
+    if (imageDrop) {
+      ['dragenter', 'dragover'].forEach((type) => {
+        imageDrop.addEventListener(type, (event) => {
+          event.preventDefault();
+          imageDrop.classList.add('is-over');
+        });
+      });
+      ['dragleave', 'dragend'].forEach((type) => {
+        imageDrop.addEventListener(type, () => imageDrop.classList.remove('is-over'));
+      });
+      imageDrop.addEventListener('drop', (event) => {
+        event.preventDefault();
+        imageDrop.classList.remove('is-over');
+        const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        if (file) uploadProductImage(file);
+      });
+    }
+    const imageUrlField = $('productForm').elements.image_url;
+    if (imageUrlField) {
+      imageUrlField.addEventListener('input', () => {
+        const typed = imageUrlField.value.trim();
+        renderImagePreview(typed || $('productForm').elements.image.value);
+        if (typed) imageHint('주소로 이미지를 표시합니다. 저장하면 적용됩니다.', 'ok');
+        else imageHint(IMAGE_HINT_DEFAULT);
+      });
+    }
 
     $('reviewForm').addEventListener('submit', (event) => {
       event.preventDefault();

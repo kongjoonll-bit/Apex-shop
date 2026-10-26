@@ -214,8 +214,13 @@
       const card = event.target.closest('.card');
       if (!card) return;
       const rect = card.getBoundingClientRect();
-      card.style.setProperty('--mx', ((event.clientX - rect.left) / rect.width * 100).toFixed(1) + '%');
-      card.style.setProperty('--my', ((event.clientY - rect.top) / rect.height * 100).toFixed(1) + '%');
+      const px = (event.clientX - rect.left) / Math.max(1, rect.width);
+      const py = (event.clientY - rect.top) / Math.max(1, rect.height);
+      card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+      card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+      /* 마우스를 따라 살짝 기울어지는 3D 틸트 */
+      card.style.setProperty('--ry', ((px - 0.5) * 6).toFixed(2) + 'deg');
+      card.style.setProperty('--rx', ((0.5 - py) * 5).toFixed(2) + 'deg');
     }, { passive: true });
 
     initReveal();
@@ -299,7 +304,11 @@
     if (!product) return '';
     return (
       '<div class="cart-item">' +
-      '<div class="cart-thumb tint-' + esc(product.tint || 'violet') + '" aria-hidden="true">' + esc(product.emoji || '🎮') + '</div>' +
+      '<div class="cart-thumb tint-' + esc(product.tint || 'violet') + '" aria-hidden="true">' +
+      (product.image
+        ? '<img class="cart-thumb-img" src="' + esc(product.image) + '" alt="">'
+        : esc(product.emoji || '🎮')) +
+      '</div>' +
       '<div class="cart-info">' +
       '<p class="cart-name">' + esc(product.name) + '</p>' +
       '<p class="cart-price">' + won(product.price) + ' × ' + line.qty + ' = ' + won(product.price * line.qty) + '</p>' +
@@ -409,8 +418,12 @@
     if (unit) unit.textContent = won(product.price) + ' · 재고 ' + product.stock + '개';
     const thumb = $('qtyThumb');
     if (thumb) {
-      thumb.textContent = product.emoji || '🎮';
       thumb.className = 'qty-thumb tint-' + (product.tint || 'violet');
+      if (product.image) {
+        thumb.innerHTML = '<img class="qty-thumb-img" src="' + esc(product.image) + '" alt="">';
+      } else {
+        thumb.textContent = product.emoji || '🎮';
+      }
     }
     const input = $('qtyInput');
     if (input) input.value = '1';
@@ -820,7 +833,7 @@
     return '<span class="stock">재고 ' + product.stock + '개</span>';
   }
 
-  function cardHtml(product) {
+  function cardHtml(product, index) {
     const soldOut = product.stock <= 0;
     const spec = product.summary || product.description || '';
     const gameLabel = state.games.length > 1 ? '<p class="card-game">' + esc(product.game) + '</p>' : '';
@@ -833,11 +846,19 @@
     const notify = soldOut
       ? '<button class="card-notify" type="button" data-action="notify" data-id="' + product.id + '">재입고 알림 받기</button>'
       : '';
-    return '<article class="card' + (soldOut ? ' is-oos' : '') + '" data-id="' + product.id + '">' +
+    const image = String(product.image || '');
+    /* 이미지가 있으면 사진을, 없으면 이모지를 크게 보여줍니다. */
+    const media = image
+      ? '<img class="card-img" src="' + esc(image) + '" alt="' + esc(product.name) + '" loading="lazy" decoding="async">'
+      : '<span class="card-glyph" aria-hidden="true">' + esc(product.emoji || '🎮') + '</span>';
+    const order = Math.max(0, Number(index) || 0);
+    return '<article class="card' + (soldOut ? ' is-oos' : '') + (image ? ' has-img' : '') +
+      '" data-id="' + product.id + '" style="--i:' + order + '">' +
       '<div class="card-media tint-' + esc(product.tint || 'violet') + '">' +
       '<span class="grade ' + gradeClass(product.grade) + '">' + esc(product.grade || '일반') + '</span>' +
       (soldOut ? '<span class="oos">품절</span>' : '<span class="card-live"><i></i>즉시지급</span>') +
-      '<span class="card-glyph" aria-hidden="true">' + esc(product.emoji || '🎮') + '</span>' +
+      media +
+      '<span class="card-shine" aria-hidden="true"></span>' +
       '<button class="card-hit" type="button" data-action="detail" data-id="' + product.id +
       '" aria-label="' + esc(product.name) + ' 상세 보기"></button></div>' +
       '<div class="card-body">' + gameLabel +
@@ -871,7 +892,7 @@
       '<section class="group" data-reveal><div class="group-head">' +
       '<h2>' + esc(group.category) + '</h2>' +
       '<span class="sec-count">' + group.items.length + '개</span></div>' +
-      '<div class="grid">' + group.items.map(cardHtml).join('') + '</div></section>'
+      '<div class="grid">' + group.items.map((item, index) => cardHtml(item, index)).join('') + '</div></section>'
     ).join('');
     initReveal();
   }
@@ -1003,8 +1024,12 @@
     if (name) name.textContent = product.name;
     const thumb = $('restockThumb');
     if (thumb) {
-      thumb.textContent = product.emoji || '🎮';
       thumb.className = 'mini-thumb tint-' + (product.tint || 'violet');
+      if (product.image) {
+        thumb.innerHTML = '<img class="mini-thumb-img" src="' + esc(product.image) + '" alt="">';
+      } else {
+        thumb.textContent = product.emoji || '🎮';
+      }
     }
     const status = $('restockState');
     if (status) {

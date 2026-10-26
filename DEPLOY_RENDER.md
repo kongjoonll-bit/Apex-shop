@@ -50,6 +50,7 @@ git push -u origin main
 | Build / Start | `npm install` / `npm start` |
 | Health check | `/api/store` |
 | DB 경로 | `SHOP_DB=/var/data/shop.db` |
+| 이미지 업로드 | `/var/data/uploads` (DB 와 같은 디스크 · 재배포해도 유지) |
 | 디스크 | `apex-shop-data` → `/var/data` (1GB) |
 
 ---

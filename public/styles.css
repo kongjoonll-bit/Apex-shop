@@ -2717,17 +2717,6 @@ svg {
   }
 }
 
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 @keyframes toastOut {
   to {
     opacity: 0;
@@ -3964,5 +3953,363 @@ svg {
     transform: none;
   }
 }
+
+/* ============================================================
+   상품 카드 확대 + 상품 이미지 + 모션
+   ============================================================ */
+.grid,
+.skel-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  perspective: 1400px;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.group-head h2 {
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.group-head h2::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--rose-400), rgba(244, 63, 94, 0));
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 700ms var(--ease) 120ms;
+}
+
+.group.is-in .group-head h2::after {
+  transform: scaleX(1);
+}
+
+/* ---------- 카드 등장 ---------- */
+.group.is-in .card {
+  animation: cardRise 620ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+  animation-delay: calc(min(var(--i, 0), 9) * 60ms);
+}
+
+@keyframes cardRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.955);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 카드 기본 크기 ---------- */
+.card {
+  --rx: 0deg;
+  --ry: 0deg;
+  border-radius: 20px;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.card:hover {
+  transform: translateY(-7px) rotateX(var(--rx)) rotateY(var(--ry));
+  border-color: rgba(244, 63, 94, 0.28);
+  box-shadow: 0 26px 50px -28px rgba(120, 20, 50, 0.45),
+    0 0 0 1px rgba(251, 113, 133, 0.14);
+}
+
+.card:active {
+  transform: translateY(-2px) scale(0.99);
+}
+
+.card-media {
+  aspect-ratio: 4 / 3;
+  border-bottom: 1px solid var(--line);
+  isolation: isolate;
+}
+
+/* ---------- 상품 이미지 ---------- */
+.card-img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.02);
+  transition: transform 760ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    filter 420ms var(--ease);
+  will-change: transform;
+}
+
+.card:hover .card-img {
+  transform: scale(1.09);
+}
+
+.card.has-img .card-media::before {
+  opacity: 0.35;
+}
+
+.card.has-img .card-media::after {
+  opacity: 0.16;
+}
+
+.card.is-oos .card-img {
+  filter: saturate(0.45) brightness(0.98);
+}
+
+.card-shine {
+  position: absolute;
+  inset: -35% -65%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 36%, rgba(255, 255, 255, 0.62) 50%, transparent 64%);
+  transform: translateX(-70%) rotate(3deg);
+}
+
+.card:hover .card-shine {
+  opacity: 1;
+  animation: cardShine 950ms var(--ease);
+}
+
+@keyframes cardShine {
+  from {
+    transform: translateX(-70%) rotate(3deg);
+  }
+  to {
+    transform: translateX(70%) rotate(3deg);
+  }
+}
+
+/* ---------- 카드 텍스트 크기 ---------- */
+.card-body {
+  gap: 6px;
+  padding: 16px 18px 18px;
+}
+
+.card-game {
+  font-size: 11px;
+}
+
+.card-name {
+  font-size: 16px;
+  line-height: 1.38;
+}
+
+.card-spec {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.card-foot {
+  margin-top: 6px;
+  padding-top: 13px;
+  transition: border-color 320ms var(--ease);
+}
+
+.card:hover .card-foot {
+  border-top-color: rgba(244, 63, 94, 0.22);
+}
+
+.price {
+  font-size: 19.5px;
+  transition: letter-spacing 320ms var(--ease), color 320ms var(--ease);
+}
+
+.card:hover .price {
+  color: var(--rose-700);
+  letter-spacing: -0.02em;
+}
+
+.stock {
+  font-size: 11.5px;
+}
+
+.card-add,
+.card-buy {
+  position: relative;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 11px;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.card-buy {
+  background-size: 180% 180%;
+  background-position: 0% 50%;
+  transition: transform 0.18s var(--ease), box-shadow 0.24s var(--ease),
+    background-position 0.6s var(--ease);
+}
+
+.card-buy:hover {
+  transform: translateY(-2px);
+  background-position: 100% 50%;
+  box-shadow: 0 14px 24px -14px rgba(225, 29, 72, 0.95);
+}
+
+.card-add:active,
+.card-buy:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.card-notify {
+  height: 40px;
+  transition: 0.18s var(--ease), transform 0.24s var(--ease);
+}
+
+.card-notify:hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- 배지 모션 ---------- */
+.grade {
+  transition: transform 320ms var(--ease), box-shadow 320ms var(--ease);
+}
+
+.card:hover .grade {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -14px rgba(74, 20, 40, 0.7);
+}
+
+.card-live {
+  transition: transform 320ms var(--ease);
+}
+
+.card:hover .card-live {
+  transform: translateY(-2px);
+}
+
+/* ---------- 썸네일 이미지 (장바구니 · 수량 · 재입고) ---------- */
+.qty-thumb,
+.mini-thumb,
+.cart-thumb {
+  position: relative;
+  overflow: hidden;
+}
+
+.qty-thumb-img,
+.mini-thumb-img,
+.cart-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* ---------- 반응형 ---------- */
+@media (min-width: 1400px) {
+
+  .grid,
+  .skel-grid {
+    grid-template-columns: repeat(auto-fill, minmax(336px, 1fr));
+    gap: 24px;
+  }
+}
+
+@media (max-width: 1024px) {
+
+  .grid,
+  .skel-grid {
+    grid-template-columns: repeat(auto-fill, minmax(262px, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+
+  .grid,
+  .skel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .card-body {
+    gap: 5px;
+    padding: 12px 13px 14px;
+  }
+
+  .card-name {
+    font-size: 13.5px;
+  }
+
+  .card-spec {
+    font-size: 11.5px;
+  }
+
+  .price {
+    font-size: 16px;
+  }
+
+  .card-add,
+  .card-buy {
+    height: 34px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 460px) {
+
+  .grid,
+  .skel-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .card-body {
+    padding: 14px 16px 16px;
+  }
+
+  .card-name {
+    font-size: 15px;
+  }
+
+  .card-spec {
+    font-size: 12.5px;
+  }
+
+  .price {
+    font-size: 18px;
+  }
+
+  .card-add,
+  .card-buy {
+    height: 38px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .group.is-in .card,
+  .card-shine,
+  .card:hover .card-shine {
+    animation: none !important;
+  }
+
+  .card-img,
+  .card:hover .card-img {
+    transition: none;
+    transform: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}
+
 
 

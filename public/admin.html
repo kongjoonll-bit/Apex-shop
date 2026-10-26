@@ -136,6 +136,26 @@
             <option value="0">숨김</option>
           </select></label>
         </div>
+        <div class="field image-field">
+          <span>상품 이미지 <em class="opt">선택 · 없으면 이모지로 표시</em></span>
+          <div class="image-drop" id="productImageDrop">
+            <div class="image-preview is-empty" id="productImagePreview">
+              <span class="image-empty">이미지 없음</span>
+            </div>
+            <div class="image-side">
+              <input type="file" id="productImageFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+              <input type="hidden" name="image">
+              <div class="image-btns">
+                <button class="btn ghost" type="button" id="productImagePick">파일 선택</button>
+                <button class="btn ghost" type="button" id="productImageClear">이미지 제거</button>
+              </div>
+              <label class="field field-tight">또는 이미지 주소
+                <input type="url" name="image_url" maxlength="600" placeholder="https://example.com/image.jpg">
+              </label>
+              <p class="image-hint" id="productImageHint">JPG · PNG · WebP · GIF / 5MB 이하. 올리면 자동으로 1280px WebP 로 줄여서 저장합니다. 이 영역에 파일을 끌어다 놓아도 됩니다.</p>
+            </div>
+          </div>
+        </div>
         <label class="field">상품명 <input type="text" name="name" required placeholder="예: 크리스탈 에그 35~50 계정"></label>
         <label class="field">한 줄 요약 <input type="text" name="summary" maxlength="120" placeholder="목록 카드에 표시됩니다."></label>
         <label class="field">상세 설명 <textarea name="description" rows="3" maxlength="600"></textarea></label>

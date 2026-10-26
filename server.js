@@ -17,6 +17,8 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const MAX_BODY = 128 * 1024;
+const UPLOAD_MAX_BODY = 6 * 1024 * 1024;
+const UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
 const COOKIE_NAME = 'shop_admin';
 const COOKIE_USER = 'shop_user';
 const LOGIN_ONLY_SETTINGS = [
@@ -59,7 +61,7 @@ function sendJson(res, status, payload, headers) {
   res.end(body);
 }
 
-function sendFile(res, filePath, status) {
+function sendFile(res, filePath, status, cacheControl) {
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404, baseHeaders({ 'Content-Type': 'text/plain; charset=utf-8' }));
@@ -70,20 +72,73 @@ function sendFile(res, filePath, status) {
     res.writeHead(status || 200, baseHeaders({
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Content-Length': data.length,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300'
+      'Cache-Control': cacheControl || (ext === '.html' ? 'no-cache' : 'public, max-age=300')
     }));
     res.end(data);
   });
 }
 
+/* ---------- 상품 이미지 ---------- */
+/* 업로드 파일은 DB 파일과 같은 폴더에 보관합니다.
+   (Render Persistent Disk 를 /var/data 에 마운트하면 재배포해도 유지됩니다.) */
+const UPLOAD_DIR = path.join(path.dirname(store.dbFile), 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+function sniffImageKind(buffer) {
+  if (!buffer || buffer.length < 12) return null;
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'png';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpg';
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  if (buffer.toString('ascii', 0, 3) === 'GIF') return 'gif';
+  return null;
+}
+
+function saveUploadedImage(body) {
+  const raw = String((body && body.data) || '');
+  const match = raw.match(/^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i);
+  const base64 = (match ? match[1] : raw).replace(/\s+/g, '');
+  if (!base64 || !/^[A-Za-z0-9+/=]+$/.test(base64)) {
+    throw new store.AppError(400, '이미지 데이터가 올바르지 않습니다.');
+  }
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) throw new store.AppError(400, '이미지 데이터가 비어 있습니다.');
+  if (buffer.length > UPLOAD_MAX_BYTES) {
+    throw new store.AppError(413, '이미지는 4MB 이하만 업로드할 수 있습니다.');
+  }
+  const kind = sniffImageKind(buffer);
+  if (!kind) {
+    throw new store.AppError(415, 'PNG · JPG · WebP · GIF 이미지만 업로드할 수 있습니다.');
+  }
+  const filename = Date.now().toString(36) + '-' + crypto.randomBytes(4).toString('hex') + '.' + kind;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  return {
+    ok: true,
+    url: '/uploads/' + filename,
+    bytes: buffer.length,
+    type: MIME['.' + kind] || 'application/octet-stream'
+  };
+}
+
+function removeUploadedImage(url) {
+  const match = String(url || '').match(/^\/uploads\/([A-Za-z0-9._-]+)$/);
+  if (!match) return;
+  try {
+    fs.unlinkSync(path.join(UPLOAD_DIR, match[1]));
+  } catch (err) {
+    /* 이미 지워졌거나 외부 URL 이면 무시합니다. */
+  }
+}
+
+
 /* ---------- request helpers ---------- */
-function readJson(req) {
+function readJson(req, limit) {
+  const max = Number(limit) > 0 ? Number(limit) : MAX_BODY;
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new store.AppError(413, '요청 본문이 너무 큽니다.'));
         req.destroy();
         return;
@@ -659,6 +714,13 @@ async function handleAdminApi(req, res, pathname) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname === '/api/admin/uploads') {
+    requireJsonContentType(req);
+    const body = await readJson(req, UPLOAD_MAX_BODY);
+    sendJson(res, 201, saveUploadedImage(body));
+    return true;
+  }
+
   if (req.method === 'POST' && pathname === '/api/admin/products') {
     requireJsonContentType(req);
     const body = await readJson(req);
@@ -670,11 +732,18 @@ async function handleAdminApi(req, res, pathname) {
   if (productMatch && (req.method === 'PATCH' || req.method === 'PUT')) {
     requireJsonContentType(req);
     const body = await readJson(req);
-    sendJson(res, 200, { product: store.updateProduct(Number(productMatch[1]), body) });
+    const before = store.getProduct(Number(productMatch[1]));
+    const product = store.updateProduct(Number(productMatch[1]), body);
+    /* 이미지가 바뀌었으면 예전 업로드 파일을 정리합니다. */
+    if (before && before.image && before.image !== product.image) removeUploadedImage(before.image);
+    sendJson(res, 200, { product });
     return true;
   }
   if (productMatch && req.method === 'DELETE') {
-    sendJson(res, 200, store.deleteProduct(Number(productMatch[1])));
+    const before = store.getProduct(Number(productMatch[1]));
+    const result = store.deleteProduct(Number(productMatch[1]));
+    if (before) removeUploadedImage(before.image);
+    sendJson(res, 200, result);
     return true;
   }
 
@@ -842,6 +911,17 @@ async function handleAdminApi(req, res, pathname) {
 function serveStatic(req, res, pathname) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     throw new store.AppError(405, '지원하지 않는 메서드입니다.');
+  }
+  /* 업로드한 상품 이미지 */
+  if (pathname.indexOf('/uploads/') === 0) {
+    const name = pathname.slice('/uploads/'.length);
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) throw new store.AppError(404, '이미지를 찾을 수 없습니다.');
+    const file = path.join(UPLOAD_DIR, name);
+    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      throw new store.AppError(404, '이미지를 찾을 수 없습니다.');
+    }
+    sendFile(res, file, 200, 'public, max-age=31536000, immutable');
+    return;
   }
   let rel = pathname === '/' ? '/index.html' : pathname;
   if (rel === '/admin' || rel === '/admin/') rel = '/admin.html';
