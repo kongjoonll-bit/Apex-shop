@@ -211,6 +211,8 @@
 
     document.addEventListener('pointermove', (event) => {
       if (reduceMotion || !(event.target instanceof Element)) return;
+      /* 터치·펜 드래그에서는 카드가 흔들리지 않도록 마우스에서만 반응합니다. */
+      if (event.pointerType && event.pointerType !== 'mouse') return;
       const card = event.target.closest('.card');
       if (!card) return;
       const rect = card.getBoundingClientRect();
