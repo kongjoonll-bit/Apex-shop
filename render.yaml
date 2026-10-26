@@ -11,7 +11,7 @@ services:
     autoDeploy: true
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /api/store
+    healthCheckPath: /api/ping
     envVars:
       - key: NODE_VERSION
         value: 24.22.1

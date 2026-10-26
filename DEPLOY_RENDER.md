@@ -48,7 +48,7 @@ git push -u origin main
 | --- | --- |
 | Runtime | Node (`NODE_VERSION=24.22.1`) |
 | Build / Start | `npm install` / `npm start` |
-| Health check | `/api/store` |
+| Health check | `/api/ping` (DB 를 건드리지 않는 경량 헬스체크) |
 | DB 경로 | `SHOP_DB=/var/data/shop.db` |
 | 이미지 업로드 | `/var/data/uploads` (DB 와 같은 디스크 · 재배포해도 유지) |
 | 디스크 | `apex-shop-data` → `/var/data` (1GB) |
@@ -99,7 +99,7 @@ Render 무료 웹 서비스는 **15분 동안 요청이 없으면 슬립**합니
 - Runtime: **Node**
 - Build Command: `npm install`
 - Start Command: `npm start`
-- Health Check Path: `/api/store`
+- Health Check Path: `/api/ping`
 - Environment:
   - `NODE_VERSION` = `24.22.1`
   - `SHOP_DB` = `/var/data/shop.db`
@@ -174,16 +174,70 @@ curl -X POST "https://<서비스주소>/api/hooks/deposit" \
 
 ---
 
+## 6-1. 데이터베이스 “적용” 방법 (로컬 · Render)
+
+이 앱은 별도 DB 서버가 필요 없는 **SQLite 파일 1개**입니다.
+스키마 생성·컬럼 추가(마이그레이션)는 **서버가 켜질 때 자동**으로 실행되므로
+따로 SQL 을 실행할 필요가 없습니다.
+
+**① 로컬(내 PC)에서 적용**
+
+```powershell
+cd game-shop
+node server.js
+```
+
+- 첫 실행 시 `data/shop.db` 가 자동 생성되고 샘플 상품이 들어갑니다.
+- 이미 있는 DB 라도 `products.image` 처럼 새로 추가된 컬럼은 부팅 시 자동으로 붙습니다.
+- 다른 위치에 두고 싶으면 `SHOP_DB` 환경변수로 경로를 지정합니다.
+
+```powershell
+$env:SHOP_DB="D:\shop-data\shop.db"; node server.js
+```
+
+**② Render 에 적용**
+
+1. 서비스 → **Environment** 에 `SHOP_DB=/var/data/shop.db` 가 있는지 확인
+2. 서비스 → **Disks** 에 `apex-shop-data` → `/var/data` (1GB) 가 붙어 있는지 확인
+3. 저장 후 **Manual Deploy → Restart** (재배포)
+4. 로그에 아래 두 줄이 보이면 적용 완료
+
+   ```
+   🎮 Apex shop 서버 실행 중
+   DB 파일: /var/data/shop.db
+   ```
+
+**③ 기존 데이터를 옮길 때 (로컬 → Render)**
+
+1. 로컬 관리자 → **설정 → DB 백업 다운로드** (`shop-backup-YYYY-MM-DD.db`)
+2. Render **Shell** 탭에서:
+   ```bash
+   curl -o /var/data/shop.db "https://<백업파일을 올린 주소>"
+   ```
+   (GitHub 등에 올리기 어렵다면 Render Shell 의 업로드 기능이나
+   `base64` 로 붙여넣는 방법을 사용하세요.)
+3. `Restart` → 로그의 `DB 파일:` 경로가 위와 같은지 확인
+4. 재시작 시 `-wal`/`-shm` 파일은 자동으로 다시 만들어집니다.
+
+> ⚠️ Free 플랜은 디스크가 없어 재배포마다 DB 가 초기화됩니다.
+> 운영(실제 판매)에는 **Starter + Disk** 구성이 필요합니다.
+
+---
+
 ## 7. 자주 겪는 문제
 
 | 증상 | 원인 / 해결 |
 | --- | --- |
+| `[핑] 실패` 로그 | 서버가 자기 주소로 핑을 보냈는데 닿지 않은 것입니다. **핑 실패만으로 서버가 꺼지지는 않습니다**(예외 가드 적용). 서비스가 실제로 내려갔다면 ① Free 플랜 월 750시간 소진 ② 15분 무요청 슬립 ③ 배포 실패를 확인하세요. |
+| 핑은 정상인데 사이트가 자주 꺼짐 | Free 플랜은 상시 가동 시 월 한도를 거의 다 씁니다. 한도를 넘으면 다음 달까지 정지 → **Starter** 로 전환하거나 `KEEP_ALIVE=0` 으로 두고 슬립을 허용하세요. |
+| Health check 실패로 배포 취소 | Health Check Path 가 **`/api/ping`** 인지 확인 (DB 를 읽지 않아 실패 확률이 낮습니다). |
 | `Cannot find module 'node:sqlite'` | Node 버전이 낮음 → `NODE_VERSION=24.22.1` 또는 `.node-version` 확인 |
 | 502 / 무한 로딩 | Start Command 가 `npm start` 인지, 로그에 포트 바인딩 오류가 없는지 확인 |
 | 재배포 후 데이터 사라짐 | 디스크 미연결 또는 `SHOP_DB` 경로가 마운트 경로(`/var/data`) 밖 |
 | 로그인 후 바로 풀림 | 커스텀 도메인/프록시에서 HTTPS 가 아닌 주소로 접속했는지 확인 (HTTPS면 Secure 쿠키 자동) |
 | 첫 접속이 30초 이상 걸림 | Free 플랜 슬립 상태에서 깨어나는 중 (Starter 는 항상 켜짐) |
 | 관리자 비밀번호 분실 | Render Shell 에서 `ADMIN_PASSWORD` 를 새 값으로 바꾸고 재배포해도, DB에 해시가 있으면 환경변수는 무시됩니다. DB 백업본이 없다면 `users`/설정 초기화가 필요합니다 |
+
 
 ---
 

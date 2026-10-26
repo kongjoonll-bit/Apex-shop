@@ -238,12 +238,6 @@
         <h3>고객센터</h3>
         <a id="footContact" href="https://discord.gg/fUVeQMdWUJ" target="_blank" rel="noopener">디스코드 문의</a>
         <span id="footHours"></span>
-        <a href="/admin">판매자 페이지</a>
-      </div>
-      <div class="foot-col">
-        <h3>입금 계좌</h3>
-        <span id="footBank" class="foot-strong">-</span>
-        <span class="muted tiny">입금자명은 주문서와 동일하게</span>
       </div>
     </div>
     <div class="wrap foot-bottom">
@@ -335,22 +329,33 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="restockBackdrop" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restockTitle">
-    <button class="modal-x" type="button" data-close="restockBackdrop" aria-label="닫기">
+<div class="modal-backdrop" id="detailBackdrop" hidden>
+  <div class="modal wide detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <button class="modal-x" type="button" data-close="detailBackdrop" aria-label="닫기">
       <svg class="ico"><use href="#i-close"/></svg>
     </button>
-    <span class="eyebrow">Restock alarm</span>
-    <h2 id="restockTitle">재입고 알림</h2>
-    <p class="modal-lead">재입고되는 즉시 알림을 보내드립니다. 로그인 계정으로 신청됩니다.</p>
-    <div class="mini-product">
-      <span class="mini-thumb" id="restockThumb">🎮</span>
-      <span class="mini-name" id="restockProduct"></span>
+    <span class="eyebrow">Product detail</span>
+    <h2 id="detailTitle">상품 상세</h2>
+    <div class="detail-hero">
+      <div class="detail-media tint-violet" id="detailMedia">
+        <span class="detail-glyph" id="detailGlyph">🎮</span>
+      </div>
+      <div class="detail-head">
+        <span class="detail-grade" id="detailGrade"></span>
+        <h3 class="detail-name" id="detailName"></h3>
+        <p class="detail-summary" id="detailSummary"></p>
+        <div class="detail-price">
+          <strong id="detailPrice">0원</strong>
+          <span class="detail-stock" id="detailStock"></span>
+        </div>
+      </div>
     </div>
-    <p class="restock-state" id="restockState"></p>
+    <h4 class="detail-label">상품 설명</h4>
+    <div class="detail-body" id="detailBody"></div>
     <div class="modal-foot">
-      <button class="btn quiet" type="button" data-close="restockBackdrop">취소</button>
-      <button class="btn primary" type="button" id="restockSubmit">알림 받기</button>
+      <button class="btn quiet" type="button" data-close="detailBackdrop">닫기</button>
+      <button class="btn ghost" type="button" id="detailAdd">장바구니 담기</button>
+      <button class="btn primary" type="button" id="detailBuy">바로 구매</button>
     </div>
   </div>
 </div>

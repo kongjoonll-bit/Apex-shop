@@ -955,6 +955,56 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+.stock-add-head {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.stock-field {
+  display: grid;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.stock-field input {
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.note-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 999px;
+  background: #fffbeb;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  overflow-wrap: anywhere;
+}
+
+.note-tag b {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d97706;
+}
+
+.stock-list-head {
+  margin: 16px 0 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
 .stock-list {
   display: grid;
   gap: 6px;

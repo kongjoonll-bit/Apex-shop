@@ -18,6 +18,8 @@ fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 const db = new DatabaseSync(DB_FILE);
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
+/* 다른 연결(백업 스크립트 등)이 잠깐 잡고 있어도 바로 실패하지 않도록 대기 */
+db.exec('PRAGMA busy_timeout = 5000;');
 
 const ORDER_STATUS = {
   pending: '입금대기',
@@ -110,24 +112,6 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at TEXT NOT NULL,
   user_id INTEGER,
   order_id INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS restock_requests (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER NOT NULL,
-  email TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  notified_at TEXT,
-  UNIQUE (product_id, email)
-);
-
-CREATE TABLE IF NOT EXISTS restock_waitlist (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER NOT NULL,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL,
-  notified_at TEXT,
-  UNIQUE (product_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -633,45 +617,6 @@ function deleteReview(id) {
   return { ok: true };
 }
 
-/* ---------- restock requests (회원 알림) ---------- */
-function addRestockRequest(productId, userId) {
-  const product = getProduct(productId);
-  if (!product) throw new AppError(404, '상품을 찾을 수 없습니다.');
-  if (product.stock > 0) throw new AppError(409, '이미 재고가 있습니다. 바로 구매할 수 있어요.');
-  db.prepare(`
-    INSERT INTO restock_waitlist (product_id, user_id, created_at) VALUES (?, ?, ?)
-    ON CONFLICT(product_id, user_id) DO UPDATE SET created_at = excluded.created_at, notified_at = NULL
-  `).run(product.id, Number(userId), nowIso());
-  return { ok: true, productName: product.name };
-}
-
-function listRestockRequests() {
-  return db.prepare(`
-    SELECT r.id, r.product_id, r.user_id, r.created_at, r.notified_at,
-           p.name AS product_name, u.username, u.display_name
-    FROM restock_waitlist r
-    LEFT JOIN products p ON p.id = r.product_id
-    LEFT JOIN users u ON u.id = r.user_id
-    ORDER BY r.id DESC
-    LIMIT 300
-  `).all().map((row) => ({
-    id: row.id,
-    productId: row.product_id,
-    productName: row.product_name || '(삭제된 상품)',
-    userId: row.user_id,
-    username: row.username || '(탈퇴 회원)',
-    displayName: row.display_name || '',
-    createdAt: row.created_at,
-    notifiedAt: row.notified_at
-  }));
-}
-
-function markRestockNotified(id) {
-  const result = db.prepare('UPDATE restock_waitlist SET notified_at = ? WHERE id = ?').run(nowIso(), Number(id));
-  if (!result.changes) throw new AppError(404, '알림 신청을 찾을 수 없습니다.');
-  return { ok: true };
-}
-
 /* ---------- admin sessions ---------- */
 const SESSION_HOURS = 12;
 
@@ -871,7 +816,6 @@ function getStats() {
   const todayRow = db.prepare(`SELECT COALESCE(SUM(total), 0) AS sum, COUNT(*) AS cnt FROM orders WHERE ${paidStatuses} AND paid_at >= ?`)
     .get(start.toISOString());
   const pending = db.prepare("SELECT COUNT(*) AS cnt FROM orders WHERE status = 'pending'").get().cnt;
-  const reviewing = db.prepare('SELECT COUNT(*) AS cnt FROM restock_waitlist WHERE notified_at IS NULL').get().cnt;
   const users = db.prepare("SELECT COUNT(*) AS cnt FROM users WHERE status = 'active'").get().cnt;
   return {
     revenueTotal: totalRow.sum,
@@ -879,7 +823,6 @@ function getStats() {
     revenueToday: todayRow.sum,
     ordersToday: todayRow.cnt,
     pendingCount: pending,
-    restockWaiting: reviewing,
     userCount: users,
     productCount: products.length,
     visibleCount: products.filter((product) => product.visible).length,
@@ -1001,9 +944,6 @@ module.exports = {
   deleteUserReview,
   toggleReview,
   deleteReview,
-  addRestockRequest,
-  listRestockRequests,
-  markRestockNotified,
   createSession,
   getSession,
   deleteSession,

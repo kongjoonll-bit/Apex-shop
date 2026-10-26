@@ -203,7 +203,7 @@
 
     document.addEventListener('pointerdown', (event) => {
       if (!(event.target instanceof Element)) return;
-      const el = event.target.closest('.btn, .card-add, .card-buy, .card-notify, .cart-btn, .account-btn, .tab, .game-chip, .auth-tab, .stepper button');
+      const el = event.target.closest('.btn, .card-add, .card-buy, .cart-btn, .account-btn, .tab, .game-chip, .auth-tab, .stepper button');
       if (!el || el.hasAttribute('disabled')) return;
       ripple(el, event);
       if (el.classList.contains('btn') || el.classList.contains('card-buy')) sparkleBurst(event.clientX, event.clientY);
@@ -406,7 +406,7 @@
     const product = productById(productId);
     if (!product) return;
     if (product.stock <= 0) {
-      openRestock(product.id);
+      openDetail(product.id);
       return;
     }
     qtyCtx.productId = product.id;
@@ -715,7 +715,6 @@
     setText('footHours', s.open_hours);
     setText('footNote', s.notice);
     setText('footBusiness', s.business_info);
-    setText('footBank', [s.bank_name, s.bank_account].filter(Boolean).join(' '));
     setText('footCopy', '© ' + (s.store_name || 'Apex shop') + ' · 자동입금확인 · 자동지급');
     document.title = (s.store_name || 'Apex shop') + ' — Apex 레전드 계정 · 코인';
 
@@ -845,9 +844,6 @@
         '<button class="card-add" type="button" data-action="add" data-id="' + product.id + '">담기</button>' +
         '<button class="card-buy" type="button" data-action="buy" data-id="' + product.id + '">구매</button>' +
         '</div>';
-    const notify = soldOut
-      ? '<button class="card-notify" type="button" data-action="notify" data-id="' + product.id + '">재입고 알림 받기</button>'
-      : '';
     const image = String(product.image || '');
     /* 이미지가 있으면 사진을, 없으면 이모지를 크게 보여줍니다. */
     const media = image
@@ -855,7 +851,7 @@
       : '<span class="card-glyph" aria-hidden="true">' + esc(product.emoji || '🎮') + '</span>';
     const order = Math.max(0, Number(index) || 0);
     return '<article class="card' + (soldOut ? ' is-oos' : '') + (image ? ' has-img' : '') +
-      '" data-id="' + product.id + '" style="--i:' + order + '">' +
+      '" data-id="' + product.id + '" data-action="detail" style="--i:' + order + '">' +
       '<div class="card-media tint-' + esc(product.tint || 'violet') + '">' +
       '<span class="grade ' + gradeClass(product.grade) + '">' + esc(product.grade || '일반') + '</span>' +
       (soldOut ? '<span class="oos">품절</span>' : '<span class="card-live"><i></i>즉시지급</span>') +
@@ -868,7 +864,7 @@
       '<p class="card-spec">' + esc(spec) + '</p>' +
       '<div class="card-foot"><div class="card-price">' +
       '<span class="price">' + numeric(product.price) + '<small>원</small></span>' + stockLabel(product) +
-      '</div>' + actions + '</div>' + notify +
+      '</div>' + actions + '</div>' +
       '</div></article>';
   }
 
@@ -1015,52 +1011,68 @@
       '<button class="btn primary" type="button" data-action="open-account">내 보관함 확인</button>' +
       '<button class="btn quiet" type="button" data-action="close-order">계속 쇼핑하기</button>';
   }
-  /* ---------- restock ---------- */
-  const restockCtx = { productId: 0 };
+  /* ---------- product detail ---------- */
+  const detailCtx = { productId: 0 };
 
-  function openRestock(productId) {
-    const product = productById(productId);
-    if (!product) return;
-    restockCtx.productId = product.id;
-    const name = $('restockProduct');
-    if (name) name.textContent = product.name;
-    const thumb = $('restockThumb');
-    if (thumb) {
-      thumb.className = 'mini-thumb tint-' + (product.tint || 'violet');
-      if (product.image) {
-        thumb.innerHTML = '<img class="mini-thumb-img" src="' + esc(product.image) + '" alt="">';
-      } else {
-        thumb.textContent = product.emoji || '🎮';
-      }
-    }
-    const status = $('restockState');
-    if (status) {
-      status.textContent = state.user
-        ? '알림은 ' + (state.user.displayName || state.user.username) + ' 계정으로 신청됩니다.'
-        : '로그인하면 재입고 즉시 알림을 받을 수 있습니다.';
-    }
-    const button = $('restockSubmit');
-    if (button) button.textContent = state.user ? '알림 신청' : '로그인하고 신청';
-    openModal('restockBackdrop');
+  function setDetailText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = value == null ? '' : String(value);
   }
 
-  async function submitRestock() {
-    if (!state.user) {
-      closeModal('restockBackdrop');
-      openAuth('login', () => openRestock(restockCtx.productId));
+  function openDetail(productId) {
+    const product = productById(productId);
+    if (!product) return;
+    detailCtx.productId = product.id;
+    const soldOut = product.stock <= 0;
+
+    const media = $('detailMedia');
+    if (media) {
+      media.className = 'detail-media tint-' + (product.tint || 'violet');
+      media.innerHTML = product.image
+        ? '<img class="detail-img" src="' + esc(product.image) + '" alt="' + esc(product.name) + '">'
+        : '<span class="detail-glyph">' + esc(product.emoji || '🎮') + '</span>';
+    }
+    const grade = $('detailGrade');
+    if (grade) {
+      grade.className = 'detail-grade ' + gradeClass(product.grade);
+      grade.textContent = product.grade || '일반';
+    }
+    setDetailText('detailTitle', product.name || '상품 상세');
+    setDetailText('detailName', product.name);
+    setDetailText('detailSummary', product.summary || '');
+    setDetailText('detailPrice', won(product.price));
+    setDetailText('detailStock', soldOut ? '품절' : '재고 ' + product.stock + '개');
+
+    /* 상세 설명은 관리자에서 입력한 그대로(줄바꿈 포함) 보여 줍니다. */
+    const desc = String(product.description || '').trim();
+    const body = $('detailBody');
+    if (body) {
+      body.textContent = desc || '등록된 상세 설명이 없습니다.';
+      body.classList.toggle('is-empty', !desc);
+    }
+
+    const addBtn = $('detailAdd');
+    if (addBtn) {
+      addBtn.disabled = soldOut;
+      addBtn.textContent = soldOut ? '품절' : '장바구니 담기';
+    }
+    const buyBtn = $('detailBuy');
+    if (buyBtn) {
+      buyBtn.disabled = soldOut;
+      buyBtn.textContent = soldOut ? '품절' : '바로 구매';
+    }
+    openModal('detailBackdrop');
+  }
+
+  function detailOrder(mode) {
+    const product = productById(detailCtx.productId);
+    if (!product) return;
+    if (product.stock <= 0) {
+      toast('재고가 없습니다. 다음 입고를 기다려 주세요.', 'warn');
       return;
     }
-    const button = $('restockSubmit');
-    if (button) button.disabled = true;
-    try {
-      await api('/api/restock', { method: 'POST', body: { productId: restockCtx.productId } });
-      closeModal('restockBackdrop');
-      toast('재입고 알림을 신청했습니다.', 'ok');
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      if (button) button.disabled = false;
-    }
+    closeModal('detailBackdrop');
+    openQty(product.id, mode);
   }
 
   /* ---------- reviews ---------- */
@@ -1237,12 +1249,12 @@
   /* ---------- actions ---------- */
   function handleAction(action, el) {
     const id = Number(el.getAttribute('data-id'));
-    if (action === 'add' || action === 'detail') {
+    if (action === 'add') {
       openQty(id, 'add');
+    } else if (action === 'detail') {
+      openDetail(id);
     } else if (action === 'buy') {
       openQty(id, 'buy');
-    } else if (action === 'notify') {
-      openRestock(id);
     } else if (action === 'inc') {
       changeQty(id, 1);
     } else if (action === 'dec') {
@@ -1387,8 +1399,10 @@
     const qtyConfirm = $('qtyConfirm');
     if (qtyConfirm) qtyConfirm.addEventListener('click', confirmQty);
 
-    const restockSubmit = $('restockSubmit');
-    if (restockSubmit) restockSubmit.addEventListener('click', submitRestock);
+    const detailAdd = $('detailAdd');
+    if (detailAdd) detailAdd.addEventListener('click', () => detailOrder('add'));
+    const detailBuy = $('detailBuy');
+    if (detailBuy) detailBuy.addEventListener('click', () => detailOrder('buy'));
 
     const sort = $('sortSelect');
     if (sort) {
@@ -1400,7 +1414,7 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
-      const order = ['accountBackdrop', 'authBackdrop', 'orderBackdrop', 'qtyBackdrop', 'restockBackdrop'];
+      const order = ['accountBackdrop', 'authBackdrop', 'orderBackdrop', 'qtyBackdrop', 'detailBackdrop'];
       for (let i = 0; i < order.length; i += 1) {
         const el = $(order[i]);
         if (el && !el.hidden) {

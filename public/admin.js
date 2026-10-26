@@ -182,7 +182,6 @@
     renderOrders();
     renderProducts();
     renderReviews();
-    renderRestock();
     renderUsers();
     renderSettings();
     renderBadges();
@@ -193,9 +192,6 @@
     const pending = $('badgeOrders');
     pending.textContent = String(stats.pendingCount || 0);
     pending.hidden = !stats.pendingCount;
-    const restock = $('badgeRestock');
-    restock.textContent = String(stats.restockWaiting || 0);
-    restock.hidden = !stats.restockWaiting;
     const users = $('badgeUsers');
     if (users) {
       users.textContent = String(stats.userCount || 0);
@@ -626,6 +622,7 @@
   function renderStock(stock, product) {
     const used = stock.filter((item) => item.used);
     const free = stock.filter((item) => !item.used);
+    const noted = stock.filter((item) => String(item.note || '').trim()).length;
     const manual = product && product.stockMode === 'manual';
     const rows = stock.length
       ? stock
@@ -633,7 +630,7 @@
             (item) =>
               '<div class="stock-row' + (item.used ? ' used' : '') + '">' +
               '<span class="cred">' + esc(item.credential) + '</span>' +
-              (item.note ? '<span class="meta">' + esc(item.note) + '</span>' : '') +
+              (item.note ? '<span class="note-tag"><b>메모</b>' + esc(item.note) + '</span>' : '') +
               '<span class="meta">' + (item.used ? '지급 ' + esc(item.orderCode || '') : '대기') + '</span>' +
               (item.used
                 ? ''
@@ -648,22 +645,27 @@
       '<div class="stock-summary">' +
       '<span>사용 가능 <b>' + free.length + '</b>개</span>' +
       '<span>지급 완료 <b>' + used.length + '</b>개</span>' +
+      '<span>메모 <b>' + noted + '</b>건</span>' +
       (manual
         ? '<span class="pill-tag">수동 상품 — 실제 재고는 상품 수정에서 관리</span>'
         : '<span class="pill-tag auto">자동 상품 — 결제 확인 시 위에서 순서대로 지급</span>') +
       '</div>' +
-      '<div class="stock-list">' + rows + '</div>' +
       '<div class="stock-add">' +
+      '<p class="stock-add-head">재고 추가</p>' +
       '<p class="small muted">한 줄에 하나씩 입력 (예: <span class="mono">id / pw / 2차비번</span>)</p>' +
       '<textarea id="stockLines" placeholder="example@mail.com / P@ssw0rd! / 1234"></textarea>' +
-      '<input type="text" id="stockNote" maxlength="200" placeholder="메모 (선택) 예: 2026년 생성 계정">' +
+      '<label class="stock-field"><span>메모 (선택 · 등록 후에도 목록에 그대로 남습니다)</span>' +
+      '<input type="text" id="stockNote" maxlength="200" placeholder="예: 2026년 생성 계정 / 등급 A"></label>' +
       '<button class="btn primary" type="button" data-action="stock-add">지급 정보 등록</button>' +
-      '</div>';
+      '</div>' +
+      '<p class="stock-list-head">등록된 지급 정보</p>' +
+      '<div class="stock-list">' + rows + '</div>';
   }
 
   async function addStock() {
     const lines = $('stockLines');
     const note = $('stockNote');
+    const noteValue = note ? note.value.trim() : '';
     if (!lines || !lines.value.trim()) {
       toast('지급 정보를 한 줄에 하나씩 입력해 주세요.', 'warn');
       return;
@@ -672,9 +674,9 @@
     try {
       const result = await api('/api/admin/products/' + productId + '/stock', {
         method: 'POST',
-        body: { credentials: lines.value, note: note ? note.value.trim() : '' }
+        body: { credentials: lines.value, note: noteValue }
       });
-      toast((result.added || 0) + '개를 등록했습니다.', 'ok');
+      toast((result.added || 0) + '개를 등록했습니다.' + (noteValue ? ' (메모 "' + noteValue + '")' : ''), 'ok');
       const data = await api('/api/admin/products/' + productId + '/stock');
       const product = (state.data.products || []).find((entry) => entry.id === productId);
       renderStock(data.stock || [], product);
@@ -732,35 +734,6 @@
     } catch (err) {
       toast(err.message, 'error');
     }
-  }
-
-  /* ---------- 재입고 ---------- */
-  function renderRestock() {
-    const list = state.data.restock || [];
-    const box = $('restockListAdmin');
-    box.innerHTML = list.length
-      ? list
-          .map(
-            (item) =>
-              '<div class="table-row' + (item.notifiedAt ? ' dim' : '') + '">' +
-              '<div class="table-main"><div class="table-text">' +
-              '<strong>' + esc(item.productName) + '</strong>' +
-              '<small class="mono">@' + esc(item.username) + (item.displayName ? ' · ' + esc(item.displayName) : '') + '</small>' +
-              '</div></div>' +
-              '<div class="table-nums">' +
-              '<span>신청 <b>' + esc(dateTime(item.createdAt)) + '</b></span>' +
-              '<span class="pill-tag ' + (item.notifiedAt ? 'on' : 'off') + '">' +
-              (item.notifiedAt ? '알림완료 ' + esc(dateTime(item.notifiedAt)) : '대기중') + '</span>' +
-              '</div>' +
-              '<div class="table-actions">' +
-              (item.notifiedAt
-                ? ''
-                : '<button class="btn tiny primary" type="button" data-action="restock-notify" data-id="' +
-                  item.id + '">알림완료</button>') +
-              '</div></div>'
-          )
-          .join('')
-      : '<p class="mini-empty">재입고 알림 신청이 없습니다.</p>';
   }
 
   /* ---------- 회원 ---------- */
@@ -1356,16 +1329,6 @@
         toast(err.message, 'error');
       }
       return;
-    }
-
-    if (action === 'restock-notify') {
-      try {
-        await api('/api/admin/restock/' + id + '/notify', { method: 'POST' });
-        toast('알림완료로 표시했습니다.', 'ok');
-        await loadData();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
     }
   }
 

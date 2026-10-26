@@ -12,6 +12,22 @@ const crypto = require('crypto');
 const store = require('./db');
 const depositParser = require('./deposit-parser');
 
+/* ────────────────────────────────────────────────────────────
+   프로세스 보호
+   예전에는 예외 하나로 프로세스가 종료되어 사이트가 내려갔습니다.
+   이제는 로그만 남기고 계속 동작합니다. (Render 자동 재시작 유발 방지)
+   ──────────────────────────────────────────────────────────── */
+process.on('uncaughtException', (err) => {
+  console.error('[치명적 오류] 프로세스를 유지합니다:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[미처리 Promise 거부] 무시하고 계속합니다:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('warning', (warning) => {
+  if (warning && warning.name !== 'ExperimentalWarning') console.warn('[경고]', warning.message);
+});
+
+
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 8080);
@@ -246,6 +262,10 @@ function resetLoginRate(ip) {
 function publicSettings() {
   const settings = store.getSettings();
   LOGIN_ONLY_SETTINGS.forEach((key) => { delete settings[key]; });
+  /* 계좌 정보는 주문서(결제 단계)에서만 보여 줍니다. 공개 페이로드에는 넣지 않습니다. */
+  delete settings.bank_name;
+  delete settings.bank_account;
+  delete settings.bank_holder;
   return settings;
 }
 
@@ -451,8 +471,14 @@ async function handlePublicApi(req, res, pathname, query) {
     return true;
   }
 
-  if (req.method === 'GET' && pathname === '/api/ping') {
-    sendJson(res, 200, { ok: true, time: new Date().toISOString(), uptime: Math.round(process.uptime()) });
+  if (req.method === 'GET' && (pathname === '/api/ping' || pathname === '/healthz')) {
+    /* DB 를 건드리지 않는 초경량 헬스체크 (Render health check / 외부 모니터용) */
+    sendJson(res, 200, {
+      ok: true,
+      time: new Date().toISOString(),
+      uptime: Math.round(process.uptime()),
+      memory: Math.round(process.memoryUsage().rss / 1048576)
+    });
     return true;
   }
 
@@ -600,11 +626,9 @@ async function handlePublicApi(req, res, pathname, query) {
     return true;
   }
 
-  if (req.method === 'POST' && pathname === '/api/restock') {
-    requireJsonContentType(req);
-    const user = requireUser(req);
-    const body = await readJson(req);
-    sendJson(res, 201, store.addRestockRequest(body.productId, user.id));
+  /* 재입고 알림 기능은 종료되었습니다. (구버전 페이지 캐시 대비 410) */
+  if (pathname === '/api/restock') {
+    sendJson(res, 410, { error: '재입고 알림 기능은 종료되었습니다.' });
     return true;
   }
 
@@ -693,7 +717,6 @@ async function handleAdminApi(req, res, pathname) {
       products,
       orders: store.listOrders(200),
       reviews: store.listReviews({ includeHidden: true }),
-      restock: store.listRestockRequests(),
       users: store.listUsers(),
       stats: store.getStats(),
       settings,
@@ -814,12 +837,6 @@ async function handleAdminApi(req, res, pathname) {
   }
   if (reviewMatch && req.method === 'DELETE') {
     sendJson(res, 200, store.deleteReview(Number(reviewMatch[1])));
-    return true;
-  }
-
-  const notifyMatch = pathname.match(/^\/api\/admin\/restock\/(\d+)\/notify$/);
-  if (notifyMatch && req.method === 'POST') {
-    sendJson(res, 200, store.markRestockNotified(Number(notifyMatch[1])));
     return true;
   }
 
@@ -1059,6 +1076,9 @@ const KEEP_ALIVE_TARGET = (process.env.KEEP_ALIVE_URL ||
 
 if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
   let lastOkLog = 0;
+  let lastFailLog = 0;
+  let fails = 0;
+
   const ping = async () => {
     const startedAt = Date.now();
     try {
@@ -1066,17 +1086,33 @@ if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
         headers: { 'user-agent': 'apex-shop-keepalive/1.0' },
         signal: AbortSignal.timeout(20000)
       });
+      /* 본문을 비워 소켓을 정리합니다. (핑이 쌓여 메모리가 새는 것 방지) */
+      await res.text().catch(() => '');
       if (!res.ok) {
-        console.warn('[핑] 응답 ' + res.status + ' · ' + KEEP_ALIVE_TARGET);
+        fails += 1;
+        const now = Date.now();
+        if (now - lastFailLog > 300000) {
+          console.warn('[핑] 응답 ' + res.status + ' · 연속 실패 ' + fails + '회 · ' + KEEP_ALIVE_TARGET);
+          lastFailLog = now;
+        }
         return;
       }
+      fails = 0;
       const now = Date.now();
       if (now - lastOkLog > 3600000) {
         console.log('[핑] 정상 ' + res.status + ' · ' + (now - startedAt) + 'ms · ' + KEEP_ALIVE_TARGET);
         lastOkLog = now;
       }
     } catch (err) {
-      console.warn('[핑] 실패 · ' + (err && err.name === 'TimeoutError' ? '시간 초과' : (err && err.message)));
+      /* 핑 실패는 서버를 멈추지 않습니다. 로그만 5분에 한 번 남깁니다. */
+      fails += 1;
+      const now = Date.now();
+      if (now - lastFailLog > 300000) {
+        const reason = err && err.name === 'TimeoutError' ? '시간 초과' : (err && err.message) || err;
+        console.warn('[핑] 실패 · 연속 ' + fails + '회 · ' + reason + ' · ' + KEEP_ALIVE_TARGET +
+          (fails >= 3 ? ' → 무료 플랜은 15분 무요청 시 슬립하며, 월 사용 시간을 다 쓰면 다음 달까지 내려갑니다.' : ''));
+        lastFailLog = now;
+      }
     }
   };
   setTimeout(ping, 2000).unref();
