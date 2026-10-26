@@ -1,0 +1,27 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# 저장소 루트가 이 폴더(game-shop)일 때 그대로 사용하세요.
+# 상위 폴더를 저장소로 올린 경우 각 서비스에 `rootDir: game-shop` 을 추가하세요.
+services:
+  - type: web
+    name: apex-shop
+    runtime: node
+    plan: starter          # Persistent Disk 를 쓰려면 starter 이상 필요
+    region: singapore      # 한국에서 가장 가까운 리전 (oregon/ohio/virginia/frankfurt/singapore)
+    branch: main
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/store
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      # SQLite 파일을 영구 디스크에 저장 (재배포/재시작해도 유지)
+      - key: SHOP_DB
+        value: /var/data/shop.db
+      # Blueprint 생성 시 Render 대시보드에서 직접 입력하도록 요청
+      - key: ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: apex-shop-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,0 +1,15 @@
+{
+  "name": "apex-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Apex 레전드 계정·코인 상점 (Node.js 내장 모듈 + SQLite, 무의존성)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check db.js"
+  },
+  "engines": {
+    "node": ">=22.13.0 <25"
+  },
+  "license": "UNLICENSED"
+}

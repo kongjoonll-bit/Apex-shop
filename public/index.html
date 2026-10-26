@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apex shop — Apex 레전드 계정 · 코인</title>
+<meta name="description" content="Apex 레전드 계정과 코인을 무통장 입금으로 구매. 자동입금확인과 동시에 지급 정보가 내 보관함으로 즉시 전달됩니다.">
+<meta name="theme-color" content="#fdf8f9">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Apex shop — Apex 레전드 계정 · 코인">
+<meta property="og:description" content="자동입금확인 · 확인 즉시 자동지급 · 내 보관함에서 평생 재확인">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fb7185'/%3E%3Cstop offset='1' stop-color='%237f1030'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Cpath d='M20 45 32 17l12 28M25.5 36h13' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="fx-ready">
+
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M4.5 8h15l-1.3 11.2a2 2 0 0 1-2 1.8H7.8a2 2 0 0 1-2-1.8L4.5 8Z"/><path d="M8.7 8V6.6a3.3 3.3 0 0 1 6.6 0V8"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 5 6.4v5.2c0 4.2 2.9 7.6 7 8.9 4.1-1.3 7-4.7 7-8.9V6.4L12 3.5Z"/><path d="M9 12l2.2 2.2L15.4 10"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4.5 6.5h15v9.2h-8.1L7 19.5v-3.8H4.5z"/><path d="M8.5 10.3h7M8.5 12.9h4.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 5.6A2.6 2.6 0 0 0 12.4 4H6.2A2.2 2.2 0 0 0 4 6.2v6.2c0 1.1.7 2 1.7 2.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.4 3 6.6 13.4h4.3L10 21l7-10.6h-4.4z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.8" y="10.5" width="14.4" height="9.7" rx="2.6"/><path d="M8.4 10.5V8a3.6 3.6 0 0 1 7.2 0v2.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="6" height="6" rx="1.6"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.6"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.6"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.6"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.5-3.7 3.5-6 7.2-6s6.7 2.3 7.2 6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8.5" cy="8.5" r="3.6"/><path d="m11.2 11.2 7.9 7.9M15.7 15.7l2-2M18 18l2-2"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path d="M7.6 5.8A15 15 0 0 1 12 5.2a15 15 0 0 1 4.4.6c2.1 3 3 6.4 2.7 10.3a12 12 0 0 1-3.7 1.9l-.8-1.3a9 9 0 0 1-5.2 0l-.8 1.3a12 12 0 0 1-3.7-1.9c-.3-3.9.6-7.3 2.7-10.3Z"/><circle cx="9.4" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.6" cy="12" r="1.1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4.5H6.5v15H14"/><path d="M12 12h8M16.5 8.5 20 12l-3.5 3.5"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.2l-1.8-5.6L4.5 10.8 10.2 9 12 3.5Z"/></symbol>
+</svg>
+
+<a class="skip" href="#shop">본문으로 바로가기</a>
+<div class="fx-layer" id="fxLayer" aria-hidden="true"></div>
+
+<header class="hdr" id="top">
+  <span class="scroll-progress" id="scrollProgress" aria-hidden="true"></span>
+  <div class="wrap hdr-row">
+    <a class="brand" href="/">
+      <span class="brand-mark"><b>A</b></span>
+      <span class="brand-text">
+        <strong id="storeName">Apex shop</strong>
+        <small id="storeTagline">Apex 레전드 계정 · 코인 전문 샵</small>
+      </span>
+    </a>
+    <nav class="nav" aria-label="주요 메뉴">
+      <a class="nav-link is-active" href="#shop">스토어</a>
+      <a class="nav-link" href="#reviews">구매 후기</a>
+      <a class="nav-link" href="#guide">이용 안내</a>
+      <a class="nav-link" href="#contact">디스코드</a>
+    </nav>
+    <div class="hdr-right">
+      <span class="live" title="자동입금확인 · 확인 즉시 자동지급"><i class="live-dot"></i>자동지급</span>
+      <button class="account-btn" id="accountButton" type="button" aria-label="내 보관함">
+        <span class="account-avatar" id="accountAvatar"><svg class="ico"><use href="#i-user"/></svg></span>
+        <span class="account-label" id="accountLabel">로그인</span>
+      </button>
+      <button class="cart-btn" id="cartButton" type="button" aria-label="장바구니 열기">
+        <svg class="ico"><use href="#i-bag"/></svg>
+        <span class="cart-label">장바구니</span>
+        <b class="cart-count" id="cartCount">0</b>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-stage">
+        <div class="hero-art" aria-hidden="true">
+          <span class="orb orb-a"></span>
+          <span class="orb orb-b"></span>
+          <span class="orb orb-c"></span>
+          <span class="hero-lines"></span>
+          <span class="hero-ring"></span>
+        </div>
+        <div class="hero-copy">
+          <span class="hero-kicker" data-reveal><i class="live-dot"></i><span id="heroKicker">24시간 자동입금확인 · 확인 즉시 자동지급</span></span>
+          <h1 class="hero-title" id="heroTitle">Apex 계정, 결제 확인 후 바로 받으세요</h1>
+          <p class="hero-lead" id="heroDesc">회원가입한 계정으로 구매하면 입금 확인 즉시 지급 정보가 내 보관함에 안전하게 담깁니다.</p>
+          <div class="hero-actions">
+            <a class="btn hero-btn" href="#shop" data-reveal>상품 둘러보기
+              <svg class="ico"><use href="#i-arrow"/></svg>
+            </a>
+            <a class="btn hero-ghost" id="heroContact" href="https://discord.gg/fUVeQMdWUJ" target="_blank" rel="noopener" data-reveal>
+              <svg class="ico"><use href="#i-discord"/></svg><span>디스코드 문의</span>
+            </a>
+          </div>
+          <dl class="hero-stats">
+            <div data-reveal><dt>판매 상품</dt><dd><span id="statProducts">0</span><i>종</i></dd></div>
+            <div data-reveal><dt>대기 재고</dt><dd><span id="statStock">0</span><i>개</i></dd></div>
+            <div data-reveal><dt>구매 후기</dt><dd><span id="statReviews">0</span><i>건</i></dd></div>
+          </dl>
+          <p class="auto-chip" id="autoChip" hidden><svg class="ico"><use href="#i-bolt"/></svg><span id="autoChipText"></span></p>
+        </div>
+      </div>
+      <p class="notice" id="noticeBar" hidden></p>
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker-track" id="tickerTrack">
+          <span><i>✦</i> APEX SHOP</span><span><i>✦</i> 자동입금확인</span><span><i>✦</i> 확인 즉시 자동지급</span>
+          <span><i>✦</i> 내 보관함 평생 보관</span><span><i>✦</i> 24시간 자동 구매</span>
+          <span><i>✦</i> APEX SHOP</span><span><i>✦</i> 자동입금확인</span><span><i>✦</i> 확인 즉시 자동지급</span>
+          <span><i>✦</i> 내 보관함 평생 보관</span><span><i>✦</i> 24시간 자동 구매</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="shop wrap" id="shop">
+    <div class="shop-head">
+      <div class="shop-title" data-reveal>
+        <span class="eyebrow">Apex Store</span>
+        <h2>상품 목록</h2>
+        <p class="sec-sub">모든 상품은 입금 확인 즉시 자동 지급됩니다.</p>
+      </div>
+      <div class="shop-tools">
+        <div class="sort">
+          <label class="sr-only" for="sortSelect">정렬</label>
+          <select id="sortSelect">
+            <option value="recommend">추천순</option>
+            <option value="popular">인기순</option>
+            <option value="priceAsc">낮은 가격순</option>
+            <option value="priceDesc">높은 가격순</option>
+          </select>
+        </div>
+        <span class="count-tag" id="resultCount">0개</span>
+      </div>
+    </div>
+
+    <div class="tabs" id="catTabs" role="tablist" aria-label="카테고리"></div>
+    <div class="game-row" id="gameChips" hidden></div>
+
+    <div class="grid-root" id="productAreas"></div>
+    <div class="empty" id="emptyState" hidden>
+      <svg class="ico"><use href="#i-grid"/></svg>
+      <p>조건에 맞는 상품이 없습니다.</p>
+      <span>다른 카테고리를 선택해 보세요.</span>
+    </div>
+  </section>
+  <section class="inquiry wrap" id="contact">
+    <div class="inquiry-card" data-reveal>
+      <div class="inquiry-copy">
+        <span class="eyebrow">Discord support</span>
+        <h2>문의는 디스코드에서</h2>
+        <p>입금 확인, 계정 수령, 상품 문의까지 디스코드에서 가장 빠르게 답변드립니다. 버튼을 누르면 공식 디스코드 서버로 이동합니다.</p>
+        <p class="inquiry-hours"><svg class="ico"><use href="#i-clock"/></svg><span id="contactHours"></span></p>
+      </div>
+      <a class="btn inquiry-btn" id="contactLink" href="https://discord.gg/fUVeQMdWUJ" target="_blank" rel="noopener">
+        <svg class="ico"><use href="#i-discord"/></svg><span>디스코드 문의</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="guide wrap" id="guide">
+    <div class="sec-head">
+      <div data-reveal>
+        <span class="eyebrow">How it works</span>
+        <h2>계정 만들고, 입금하면 끝</h2>
+        <p class="sec-sub">이메일 입력 없이 로그인 계정으로 구매·수령·보관까지 한 번에.</p>
+      </div>
+    </div>
+    <ol class="guide-steps">
+      <li data-reveal>
+        <span class="guide-no">1</span>
+        <div class="guide-body">
+          <h3>회원가입 · 로그인</h3>
+          <p>아이디와 비밀번호만으로 계정을 만듭니다. 지급 정보는 이 계정에만 저장됩니다.</p>
+        </div>
+      </li>
+      <li data-reveal>
+        <span class="guide-no">2</span>
+        <div class="guide-body">
+          <h3>상품 담기 · 입금</h3>
+          <p>원하는 Apex 상품을 담고 안내된 계좌로 입금합니다. 입금자명은 주문서와 동일하게.</p>
+        </div>
+      </li>
+      <li data-reveal>
+        <span class="guide-no">3</span>
+        <div class="guide-body">
+          <h3>자동 확인 · 즉시 지급</h3>
+          <p>입금이 확인되는 순간 계정 정보가 자동 지급되어 내 보관함에 담깁니다.</p>
+        </div>
+      </li>
+      <li data-reveal>
+        <span class="guide-no">4</span>
+        <div class="guide-body">
+          <h3>보관함에서 재확인</h3>
+          <p>지급된 아이디·비밀번호는 로그인 후 언제든 다시 복사할 수 있습니다.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="reviews wrap" id="reviews" hidden>
+    <div class="sec-head">
+      <div data-reveal>
+        <span class="eyebrow">Reviews</span>
+        <h2>구매 인증 후기</h2>
+        <p class="sec-sub">실제로 구매한 분들이 남긴 후기입니다.</p>
+      </div>
+      <span class="avg" id="reviewAvg"></span>
+    </div>
+    <div class="review-grid" id="reviewList"></div>
+  </section>
+  <footer class="foot">
+    <div class="wrap foot-grid">
+      <div class="foot-brand">
+        <div class="brand">
+          <span class="brand-mark"><b>A</b></span>
+          <span class="brand-text"><strong id="footStoreName">Apex shop</strong><small>Apex 계정 · 즉시 지급</small></span>
+        </div>
+        <p class="foot-note" id="footNote"></p>
+        <p class="foot-meta" id="footBusiness"></p>
+      </div>
+      <nav class="foot-col" aria-label="상점 바로가기">
+        <h3>상점</h3>
+        <a href="#shop">상품 보기</a>
+        <a href="#reviews">구매 후기</a>
+        <a href="#guide">이용 안내</a>
+        <button class="foot-link" type="button" data-open-account>내 보관함</button>
+      </nav>
+      <div class="foot-col">
+        <h3>고객센터</h3>
+        <a id="footContact" href="https://discord.gg/fUVeQMdWUJ" target="_blank" rel="noopener">디스코드 문의</a>
+        <span id="footHours"></span>
+        <a href="/admin">판매자 페이지</a>
+      </div>
+      <div class="foot-col">
+        <h3>입금 계좌</h3>
+        <span id="footBank" class="foot-strong">-</span>
+        <span class="muted tiny">입금자명은 주문서와 동일하게</span>
+      </div>
+    </div>
+    <div class="wrap foot-bottom">
+      <span id="footCopy">© Apex shop</span>
+      <span class="foot-keys">Apex 계정 구매 · 자동입금확인 · 즉시 자동지급</span>
+    </div>
+  </footer>
+</main>
+
+<div class="drawer-scrim" id="cartBackdrop" hidden></div>
+<aside class="drawer" id="cartDrawer" aria-hidden="true" aria-label="장바구니">
+  <div class="drawer-head">
+    <div>
+      <span class="eyebrow">Order</span>
+      <h2 class="drawer-title">주문서 <span class="drawer-count" id="cartDrawerCount">0종</span></h2>
+    </div>
+    <button class="icon-btn" id="cartClose" type="button" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+  </div>
+  <div class="drawer-scroll">
+    <div class="cart-items" id="cartBody"></div>
+    <div class="cart-auth" id="cartAuthBox">
+      <div class="cart-auth-icon"><svg class="ico"><use href="#i-user"/></svg></div>
+      <div class="cart-auth-copy">
+        <strong id="cartAuthTitle">로그인이 필요합니다</strong>
+        <span id="cartAuthDesc">구매·지급 정보는 로그인 계정에 안전하게 보관됩니다.</span>
+      </div>
+      <button class="btn tiny primary" id="cartAuthBtn" type="button">로그인</button>
+    </div>
+    <form class="cart-form" id="cartForm" novalidate>
+      <label class="field">
+        <span>입금자명</span>
+        <input name="buyerName" type="text" maxlength="20" placeholder="은행에 표시될 이름" autocomplete="name">
+      </label>
+      <label class="field">
+        <span>요청 메모 <em class="opt">선택</em></span>
+        <input name="memo" type="text" maxlength="120" placeholder="예: 충전 닉네임 / 요청사항">
+      </label>
+      <label class="agree">
+        <input name="agree" type="checkbox">
+        <span class="agree-box" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span>
+        <span class="agree-text">지급 완료 후 환불·재지급이 불가함에 동의합니다. <b>(필수)</b></span>
+      </label>
+      <p class="form-hint"><svg class="ico"><use href="#i-bolt"/></svg><span id="checkoutHint">입금 확인 즉시 지급 정보가 내 보관함에 담깁니다.</span></p>
+    </form>
+  </div>
+  <div class="drawer-bar">
+    <div class="bar-sum">
+      <span>결제 금액</span>
+      <strong id="cartTotal">0원</strong>
+    </div>
+    <div class="bar-actions">
+      <button class="btn quiet" id="cartContinue" type="button">더 담기</button>
+      <button class="btn primary" id="cartCheckout" type="button">주문하기</button>
+    </div>
+  </div>
+</aside>
+<div class="modal-backdrop" id="qtyBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="qtyTitle">
+    <button class="modal-x" type="button" data-close="qtyBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <span class="eyebrow">Add to cart</span>
+    <h2 id="qtyTitle">수량 선택</h2>
+    <div class="qty-product">
+      <div class="qty-thumb" id="qtyThumb">🎮</div>
+      <div class="qty-meta">
+        <p class="qty-name" id="qtyName"></p>
+        <p class="qty-unit" id="qtyUnit"></p>
+      </div>
+    </div>
+    <div class="qty-row">
+      <span>수량</span>
+      <div class="stepper">
+        <button type="button" id="qtyMinus" aria-label="수량 줄이기"><svg class="ico"><use href="#i-minus"/></svg></button>
+        <input type="text" id="qtyInput" value="1" inputmode="numeric" aria-label="수량">
+        <button type="button" id="qtyPlus" aria-label="수량 늘리기"><svg class="ico"><use href="#i-plus"/></svg></button>
+      </div>
+    </div>
+    <div class="qty-total">
+      <span>예상 금액</span>
+      <strong id="qtyTotal">0원</strong>
+    </div>
+    <div class="modal-foot">
+      <button class="btn quiet" type="button" data-close="qtyBackdrop">취소</button>
+      <button class="btn primary" type="button" id="qtyConfirm">장바구니 담기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="restockBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restockTitle">
+    <button class="modal-x" type="button" data-close="restockBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <span class="eyebrow">Restock alarm</span>
+    <h2 id="restockTitle">재입고 알림</h2>
+    <p class="modal-lead">재입고되는 즉시 알림을 보내드립니다. 로그인 계정으로 신청됩니다.</p>
+    <div class="mini-product">
+      <span class="mini-thumb" id="restockThumb">🎮</span>
+      <span class="mini-name" id="restockProduct"></span>
+    </div>
+    <p class="restock-state" id="restockState"></p>
+    <div class="modal-foot">
+      <button class="btn quiet" type="button" data-close="restockBackdrop">취소</button>
+      <button class="btn primary" type="button" id="restockSubmit">알림 받기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="authBackdrop" hidden>
+  <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <button class="modal-x" type="button" data-close="authBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <div class="auth-brand"><span class="auth-mark">A</span><span class="eyebrow">Apex shop account</span></div>
+    <h2 id="authTitle">로그인</h2>
+    <p class="modal-lead" id="authLead">구매와 지급 정보를 내 계정에 안전하게 보관합니다.</p>
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab is-active" type="button" data-auth-tab="login">로그인</button>
+      <button class="auth-tab" type="button" data-auth-tab="register">회원가입</button>
+    </div>
+    <form id="authForm" novalidate>
+      <label class="field auth-name-field" id="authNameField" hidden>
+        <span>닉네임 <em class="opt">선택</em></span>
+        <input id="authDisplayName" type="text" maxlength="20" autocomplete="nickname" placeholder="주문서에 표시될 이름">
+      </label>
+      <label class="field">
+        <span>아이디</span>
+        <input id="authUsername" type="text" maxlength="20" autocomplete="username" placeholder="영문·숫자 4~20자" required>
+      </label>
+      <label class="field">
+        <span>비밀번호</span>
+        <input id="authPassword" type="password" minlength="6" maxlength="100" autocomplete="current-password" placeholder="6자 이상" required>
+      </label>
+      <p class="auth-error" id="authError" hidden></p>
+      <button class="btn primary lg auth-submit" id="authSubmit" type="submit">로그인</button>
+    </form>
+    <p class="auth-note"><svg class="ico"><use href="#i-shield"/></svg>비밀번호는 암호화되어 저장되며, 지급 정보는 이 계정으로만 전달됩니다.</p>
+  </div>
+</div>
+<div class="modal-backdrop" id="accountBackdrop" hidden>
+  <div class="modal wide account-modal" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+    <button class="modal-x" type="button" data-close="accountBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <div class="account-head">
+      <div class="account-id">
+        <span class="vault-avatar" id="accountInitial">A</span>
+        <div>
+          <span class="eyebrow">My vault</span>
+          <h2 id="accountTitle">내 보관함</h2>
+          <p class="account-sub"><strong id="accountNickname">-</strong><span id="accountUsername">@</span></p>
+        </div>
+      </div>
+      <button class="btn tiny ghost" type="button" id="accountLogout">
+        <svg class="ico"><use href="#i-logout"/></svg>로그아웃
+      </button>
+    </div>
+    <div class="account-stats">
+      <div><span>전체 주문</span><strong id="accountOrderCount">0</strong></div>
+      <div><span>지급 완료</span><strong id="accountDeliveredCount">0</strong></div>
+      <div><span>보관 중인 계정</span><strong id="accountCredCount">0</strong></div>
+    </div>
+    <div class="vault-list" id="accountOrders"></div>
+    <div class="account-foot" id="accountFoot">
+      <a class="btn primary" id="accountShopBtn" href="#shop">쇼핑 계속하기</a>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="orderBackdrop" hidden>
+  <div class="modal modal-order" role="dialog" aria-modal="true" aria-labelledby="orderTitle">
+    <button class="modal-x" type="button" data-close="orderBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <div id="orderBody"></div>
+    <div class="modal-foot" id="orderFoot"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="/store.js"></script>
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>판매자 관리 — Apex shop</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#fbf7f8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fb7185'/%3E%3Cstop offset='1' stop-color='%23be123c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M32 17v30M17 32h30' stroke='%23fff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<!-- 로그인 -->
+<div class="login-wrap" id="loginScreen">
+  <form class="login-card" id="loginForm">
+    <div class="brand center-brand">
+      <span class="brand-mark">A</span>
+      <span class="brand-text">
+        <strong>Apex shop 관리자</strong>
+        <small>자동입금확인 · 확인 즉시 자동지급</small>
+      </span>
+    </div>
+    <p class="muted center">관리자 비밀번호를 입력해 주세요.</p>
+    <label class="field">비밀번호
+      <input type="password" id="loginPassword" autocomplete="current-password" required placeholder="••••••••">
+    </label>
+    <p class="login-error" id="loginError" hidden></p>
+    <button class="btn primary lg" type="submit" id="loginSubmit">로그인</button>
+    <a class="muted center small" href="/">← 상점으로 돌아가기</a>
+  </form>
+</div>
+
+<!-- 관리자 -->
+<div id="adminApp" hidden>
+  <header class="admin-head">
+    <div class="wrap admin-head-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark">A</span>
+        <span class="brand-text">
+          <strong id="adminStoreName">판매자 관리</strong>
+          <small>자동입금확인 → 자동지급</small>
+        </span>
+      </a>
+      <nav class="admin-tabs" id="adminTabs">
+        <button class="tab-btn active" type="button" data-tab="dashboard">현황</button>
+        <button class="tab-btn" type="button" data-tab="orders">주문<span class="tab-badge" id="badgeOrders" hidden>0</span></button>
+        <button class="tab-btn" type="button" data-tab="products">상품</button>
+        <button class="tab-btn" type="button" data-tab="users">회원<span class="tab-badge" id="badgeUsers" hidden>0</span></button>
+        <button class="tab-btn" type="button" data-tab="reviews">후기</button>
+        <button class="tab-btn" type="button" data-tab="restock">재입고<span class="tab-badge" id="badgeRestock" hidden>0</span></button>
+        <button class="tab-btn" type="button" data-tab="settings">설정</button>
+      </nav>
+      <div class="admin-head-actions">
+        <button class="btn tiny ghost" type="button" id="refreshBtn">새로고침</button>
+        <button class="btn tiny ghost" type="button" id="logoutBtn">로그아웃</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap admin-main">
+    <!-- 현황 -->
+    <section class="panel active" id="tab-dashboard">
+      <div class="panel-head">
+        <h2>현황</h2>
+        <p class="muted">입금 대기 주문을 먼저 확인하세요.</p>
+      </div>
+      <div class="auto-panel" id="autoPanel"></div>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="two-col">
+        <div class="box">
+          <h3>입금 확인 대기</h3>
+          <div id="pendingList" class="mini-table"></div>
+        </div>
+        <div class="box">
+          <h3>재고 부족 상품</h3>
+          <div id="lowStockList" class="mini-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 주문 -->
+    <section class="panel" id="tab-orders">
+      <div class="panel-head">
+        <h2>주문 관리</h2>
+        <p class="muted">입금이 확인되면 <b>입금확인</b>을 눌러주세요. 재고가 자동 배정됩니다.</p>
+      </div>
+      <div class="filter-bar">
+        <input type="search" id="orderSearch" placeholder="주문번호 / 입금자명 / 회원 아이디 검색">
+        <select id="orderStatusFilter">
+          <option value="all">전체 상태</option>
+          <option value="pending">입금대기</option>
+          <option value="paid">입금확인</option>
+          <option value="delivered">지급완료</option>
+          <option value="canceled">취소</option>
+        </select>
+      </div>
+      <div id="orderList" class="order-list"></div>
+    </section>
+
+    <!-- 상품 -->
+    <section class="panel" id="tab-products">
+      <div class="panel-head">
+        <h2>상품 관리</h2>
+        <p class="muted">계정 상품은 <b>자동(재고풀)</b>, 칭호·대리 같은 서비스는 <b>수동(개수 직접 관리)</b>을 쓰세요.</p>
+      </div>
+      <form class="box product-form" id="productForm">
+        <h3 id="productFormTitle">새 상품 추가</h3>
+        <input type="hidden" name="id">
+        <div class="grid-2">
+          <label class="field">게임 <input type="text" name="game" required placeholder="예: 로블록스 · 입양하세요"></label>
+          <label class="field">카테고리 <input type="text" name="category" required placeholder="계정 / 아이템 / 대리"></label>
+          <label class="field">등급 <input type="text" name="grade" placeholder="전설 / 에픽 / 레어 / 일반"></label>
+          <label class="field">이모지 <input type="text" name="emoji" maxlength="4" placeholder="🎮"></label>
+          <label class="field">색상 <select name="tint">
+            <option value="violet">보라</option>
+            <option value="cyan">시안</option>
+            <option value="lime">라임</option>
+            <option value="amber">앰버</option>
+            <option value="rose">로즈</option>
+          </select></label>
+          <label class="field">가격(원) <input type="number" name="price" min="0" step="100" required></label>
+          <label class="field">재고 방식 <select name="stock_mode">
+            <option value="auto">자동 (계정 재고풀)</option>
+            <option value="manual">수동 (개수 직접 관리)</option>
+          </select></label>
+          <label class="field">수동 재고 수량 <input type="number" name="manual_stock" min="0" step="1" value="0"></label>
+          <label class="field">정렬 순서 <input type="number" name="sort_order" step="1" value="100"></label>
+          <label class="field">노출 <select name="visible">
+            <option value="1">노출</option>
+            <option value="0">숨김</option>
+          </select></label>
+        </div>
+        <label class="field">상품명 <input type="text" name="name" required placeholder="예: 크리스탈 에그 35~50 계정"></label>
+        <label class="field">한 줄 요약 <input type="text" name="summary" maxlength="120" placeholder="목록 카드에 표시됩니다."></label>
+        <label class="field">상세 설명 <textarea name="description" rows="3" maxlength="600"></textarea></label>
+        <div class="form-actions">
+          <button class="btn primary" type="submit" id="productSubmit">상품 저장</button>
+          <button class="btn ghost" type="button" id="productReset">입력 초기화</button>
+        </div>
+      </form>
+      <div id="productList" class="admin-table"></div>
+    </section>
+
+    <!-- 회원 -->
+    <section class="panel" id="tab-users">
+      <div class="panel-head">
+        <h2>회원 관리</h2>
+        <p class="muted">지급 정보는 회원 계정으로 전달됩니다. 아이디 검색 · 차단 · 비밀번호 재설정 · 삭제가 가능합니다.</p>
+      </div>
+      <div class="filter-bar">
+        <input type="search" id="userSearch" placeholder="아이디 / 닉네임 검색">
+        <span class="pill-tag" id="userCountTag">0명</span>
+      </div>
+      <div id="userList" class="admin-table"></div>
+    </section>
+
+    <!-- 후기 -->
+    <section class="panel" id="tab-reviews">
+      <div class="panel-head">
+        <h2>후기 관리</h2>
+        <p class="muted">직접 후기를 등록하거나, 부적절한 후기를 숨길 수 있습니다.</p>
+      </div>
+      <form class="box review-form" id="reviewForm">
+        <h3>후기 등록</h3>
+        <div class="grid-2">
+          <label class="field">상품 <select name="productId" id="reviewProduct"></select></label>
+          <label class="field">작성자 <input type="text" name="author" maxlength="20" required placeholder="닉네임"></label>
+          <label class="field">별점 <select name="rating">
+            <option value="5">★★★★★ (5)</option>
+            <option value="4">★★★★☆ (4)</option>
+            <option value="3">★★★☆☆ (3)</option>
+            <option value="2">★★☆☆☆ (2)</option>
+            <option value="1">★☆☆☆☆ (1)</option>
+          </select></label>
+          <label class="field">구매 인증 <select name="verified">
+            <option value="1">인증</option>
+            <option value="0">미인증</option>
+          </select></label>
+        </div>
+        <label class="field">내용 <textarea name="body" rows="2" maxlength="300" required></textarea></label>
+        <div class="form-actions">
+          <button class="btn primary" type="submit">후기 등록</button>
+        </div>
+      </form>
+      <div id="reviewListAdmin" class="admin-table"></div>
+    </section>
+
+    <!-- 재입고 -->
+    <section class="panel" id="tab-restock">
+      <div class="panel-head">
+        <h2>재입고 알림 신청</h2>
+        <p class="muted">재입고 후 고객에게 안내하고 <b>알림완료</b>로 표시하세요.</p>
+      </div>
+      <div id="restockListAdmin" class="admin-table"></div>
+    </section>
+
+    <!-- 설정 -->
+    <section class="panel" id="tab-settings">
+      <div class="panel-head">
+        <h2>상점 설정</h2>
+        <p class="muted">상점 이름, 계좌, 공지 문구를 바꿀 수 있습니다.</p>
+      </div>
+      <form class="box settings-form" id="settingsForm">
+        <div id="settingsFields"></div>
+        <div class="form-actions">
+          <button class="btn primary" type="submit">설정 저장</button>
+        </div>
+      </form>
+
+      <div class="box webhook-box">
+        <h3>자동입금확인 · 웹훅</h3>
+        <p class="muted small">자동입금확인은 설정한 지연 시간이 지난 입금대기 주문을 자동으로 확인하고 즉시 지급합니다. 실제 은행 입금 알림을 연동하려면 아래 웹훅 주소로 <b>주문번호</b> 또는 <b>금액</b>을 전송하세요.</p>
+        <div class="webhook-row"><span>웹훅 주소</span><code id="webhookUrl">-</code><button class="btn tiny ghost" id="webhookCopy" type="button">복사</button></div>
+        <div class="webhook-row"><span>토큰</span><code id="webhookToken">-</code><button class="btn tiny ghost" id="webhookTokenCopy" type="button">복사</button></div>
+        <pre class="webhook-sample" id="webhookSample"></pre>
+        <div class="form-actions">
+          <button class="btn primary" id="autoRunBtn" type="button">지금 자동확인 실행</button>
+        </div>
+      </div>
+
+      <div class="box backup-box">
+        <h3>데이터베이스 백업</h3>
+        <p class="muted small">주문·회원·재고가 담긴 SQLite 파일을 내려받습니다. Render 같은 클라우드에서는 배포/재시작 전에 백업해 두세요.</p>
+        <div class="form-actions">
+          <a class="btn ghost" href="/api/admin/backup" download>DB 백업 다운로드</a>
+        </div>
+      </div>
+
+      <form class="box password-form" id="passwordForm">
+        <h3>비밀번호 변경</h3>
+        <p class="muted small">기본 비밀번호(admin1234)를 사용 중이라면 반드시 변경하세요.</p>
+        <div class="grid-2">
+          <label class="field">현재 비밀번호 <input type="password" name="current" required autocomplete="current-password"></label>
+          <label class="field">새 비밀번호 (8자 이상) <input type="password" name="next" minlength="8" required autocomplete="new-password"></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" type="submit">비밀번호 변경</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<!-- 재고풀 -->
+<div class="modal-backdrop" id="stockBackdrop" hidden>
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="stockTitle">
+    <header class="modal-head">
+      <h2 id="stockTitle">재고풀</h2>
+      <button class="icon-btn" type="button" data-close="stockBackdrop" aria-label="닫기">✕</button>
+    </header>
+    <div class="modal-body" id="stockBody"></div>
+    <footer class="modal-foot">
+      <button class="btn ghost" type="button" data-close="stockBackdrop">닫기</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="/admin.js"></script>
+</body>
+</html>
+
+

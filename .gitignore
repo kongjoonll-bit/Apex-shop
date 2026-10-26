@@ -1,0 +1,14 @@
+# 데이터베이스 (회원 비밀번호 해시 · 주문 · 재고 포함) — 절대 커밋 금지
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/shop-backup-*.db
+*.db
+*.db-wal
+*.db-shm
+
+# 로그 · 임시 파일
+*.log
+_tmp*
+node_modules/
+.env
