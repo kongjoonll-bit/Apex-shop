@@ -1037,7 +1037,6 @@
       grade.className = 'detail-grade ' + gradeClass(product.grade);
       grade.textContent = product.grade || '일반';
     }
-    setDetailText('detailTitle', product.name || '상품 상세');
     setDetailText('detailName', product.name);
     setDetailText('detailSummary', product.summary || '');
     setDetailText('detailPrice', won(product.price));
