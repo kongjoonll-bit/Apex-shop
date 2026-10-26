@@ -1063,23 +1063,76 @@ setInterval(() => {
 }, 15000).unref();
 
 /* ────────────────────────────────────────────────────────────
-   무료 플랜 슬립 방지: 5분마다 공개 URL 을 스스로 핑합니다.
-   Render 무료 웹 서비스는 15분간 요청이 없으면 잠들기 때문에,
-   RENDER_EXTERNAL_URL 이 있으면 자동으로 켜집니다.
-   KEEP_ALIVE=0 으로 끄고, KEEP_ALIVE_URL / KEEP_ALIVE_INTERVAL_SECONDS 로 조정합니다.
+   무료 플랜 슬립 방지 (self ping)
+   · 주소 우선순위: KEEP_ALIVE_URL → RENDER_EXTERNAL_URL → RENDER_EXTERNAL_HOSTNAME
+   · 공개 주소가 없으면 자기 자신(127.0.0.1)으로만 핑합니다. (프로세스 워밍업용)
+   · 주소 형식이 잘못되면(예: 값이 아니라 변수 이름을 넣은 경우) 핑을 켜지 않고 한 번만 안내합니다.
+   · 실패하면 5분을 기다리지 않고 60초 뒤 다시 시도합니다. (서버는 계속 살아 있음)
+   · KEEP_ALIVE=0 으로 끄고, KEEP_ALIVE_INTERVAL_SECONDS / KEEP_ALIVE_RETRY_SECONDS 로 조정합니다.
    ──────────────────────────────────────────────────────────── */
 const KEEP_ALIVE_ENABLED = process.env.KEEP_ALIVE !== '0';
 /* 최소 5초(테스트용) · 기본 300초(5분) */
 const KEEP_ALIVE_INTERVAL_MS = Math.max(5, Number(process.env.KEEP_ALIVE_INTERVAL_SECONDS) || 300) * 1000;
-const KEEP_ALIVE_TARGET = (process.env.KEEP_ALIVE_URL ||
-  (process.env.RENDER_EXTERNAL_URL ? process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '') + '/api/ping' : '')).trim();
+/* 핑이 한 번 실패하면 이 간격으로 재시도 (기본 60초) */
+const KEEP_ALIVE_RETRY_MS = Math.max(5, Number(process.env.KEEP_ALIVE_RETRY_SECONDS) || 60) * 1000;
 
-if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
+/* "RENDER_EXTERNAL_URL/api/ping" 처럼 변수 이름을 그대로 넣은 값은 버립니다. */
+function keepAliveUrl(value, suffix) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let candidate = '';
+  if (/^https?:\/\//i.test(raw)) {
+    candidate = raw;
+  } else if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d+)?(\/.*)?$/i.test(raw)) {
+    candidate = 'https://' + raw;
+  }
+  if (!candidate) return '';
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    if (suffix && (url.pathname === '/' || url.pathname === '')) url.pathname = suffix;
+    return url.toString();
+  } catch (err) {
+    return '';
+  }
+}
+
+const KEEP_ALIVE_PUBLIC_URL = keepAliveUrl(process.env.KEEP_ALIVE_URL, '/api/ping') ||
+  keepAliveUrl(process.env.RENDER_EXTERNAL_URL, '/api/ping') ||
+  keepAliveUrl(process.env.RENDER_EXTERNAL_HOSTNAME, '/api/ping');
+const KEEP_ALIVE_LOCAL_URL = 'http://127.0.0.1:' + PORT + '/api/ping';
+const KEEP_ALIVE_TARGET = KEEP_ALIVE_PUBLIC_URL || KEEP_ALIVE_LOCAL_URL;
+
+if (KEEP_ALIVE_ENABLED && !KEEP_ALIVE_PUBLIC_URL) {
+  const raw = String(process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
+  console.warn('[핑] 공개 주소를 확인할 수 없습니다' + (raw ? ' (잘못된 값: ' + raw + ')' : '') +
+    ' → 자기 자신(' + KEEP_ALIVE_LOCAL_URL + ')만 확인합니다.');
+  console.warn('[핑] Render 무료 플랜 슬립 방지는 외부에서 https://<서비스>.onrender.com/api/ping 을 호출해야 확실합니다.');
+}
+
+if (KEEP_ALIVE_ENABLED) {
+  let timer = null;
   let lastOkLog = 0;
   let lastFailLog = 0;
   let fails = 0;
 
-  const ping = async () => {
+  function schedule(ms) {
+    timer = setTimeout(ping, ms);
+    if (timer.unref) timer.unref();
+  }
+
+  function logFail(reason) {
+    const now = Date.now();
+    if (now - lastFailLog < 300000) return;
+    lastFailLog = now;
+    console.warn('[핑] 실패 · 연속 ' + fails + '회 · ' + reason + ' · ' + KEEP_ALIVE_TARGET +
+      ' → ' + Math.round(KEEP_ALIVE_RETRY_MS / 1000) + '초 뒤 다시 시도합니다. (서버는 계속 동작)');
+    if (fails >= 3 && !KEEP_ALIVE_PUBLIC_URL) {
+      console.warn('[핑] 외부 핑 서비스(cron-job.org / UptimeRobot)가 https://<서비스>.onrender.com/api/ping 을 호출하게 하면 슬립을 막을 수 있습니다.');
+    }
+  }
+
+  async function ping() {
     const startedAt = Date.now();
     try {
       const res = await fetch(KEEP_ALIVE_TARGET, {
@@ -1090,11 +1143,8 @@ if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
       await res.text().catch(() => '');
       if (!res.ok) {
         fails += 1;
-        const now = Date.now();
-        if (now - lastFailLog > 300000) {
-          console.warn('[핑] 응답 ' + res.status + ' · 연속 실패 ' + fails + '회 · ' + KEEP_ALIVE_TARGET);
-          lastFailLog = now;
-        }
+        logFail('응답 ' + res.status);
+        schedule(KEEP_ALIVE_RETRY_MS);
         return;
       }
       fails = 0;
@@ -1103,20 +1153,17 @@ if (KEEP_ALIVE_ENABLED && KEEP_ALIVE_TARGET) {
         console.log('[핑] 정상 ' + res.status + ' · ' + (now - startedAt) + 'ms · ' + KEEP_ALIVE_TARGET);
         lastOkLog = now;
       }
+      schedule(KEEP_ALIVE_INTERVAL_MS);
     } catch (err) {
-      /* 핑 실패는 서버를 멈추지 않습니다. 로그만 5분에 한 번 남깁니다. */
+      /* 핑 실패는 서버를 멈추지 않습니다. 로그만 5분에 한 번 남기고 계속 재시도합니다. */
       fails += 1;
-      const now = Date.now();
-      if (now - lastFailLog > 300000) {
-        const reason = err && err.name === 'TimeoutError' ? '시간 초과' : (err && err.message) || err;
-        console.warn('[핑] 실패 · 연속 ' + fails + '회 · ' + reason + ' · ' + KEEP_ALIVE_TARGET +
-          (fails >= 3 ? ' → 무료 플랜은 15분 무요청 시 슬립하며, 월 사용 시간을 다 쓰면 다음 달까지 내려갑니다.' : ''));
-        lastFailLog = now;
-      }
+      const reason = err && err.name === 'TimeoutError' ? '시간 초과' : (err && err.message) || err;
+      logFail(reason);
+      schedule(KEEP_ALIVE_RETRY_MS);
     }
-  };
-  setTimeout(ping, 2000).unref();
-  setInterval(ping, KEEP_ALIVE_INTERVAL_MS).unref();
+  }
+
+  schedule(2000);
   console.log('[핑] 슬립 방지 활성 · ' + Math.round(KEEP_ALIVE_INTERVAL_MS / 1000) + '초 간격 · ' + KEEP_ALIVE_TARGET);
 }
 

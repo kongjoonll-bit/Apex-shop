@@ -74,7 +74,12 @@ Render 무료 웹 서비스는 **15분 동안 요청이 없으면 슬립**합니
 | --- | --- | --- |
 | `KEEP_ALIVE` | `1` | `0` 이면 핑 끔 |
 | `KEEP_ALIVE_INTERVAL_SECONDS` | `300` | 핑 간격(초). 최소 5 (권장 300) |
-| `KEEP_ALIVE_URL` | `RENDER_EXTERNAL_URL/api/ping` | 직접 지정할 때 |
+| `KEEP_ALIVE_URL` | (비움) | 보통 **비워 두세요**. 넣을 때는 `https://내주소.onrender.com/api/ping` 같은 **실제 주소**를 넣어야 합니다. `RENDER_EXTERNAL_URL/api/ping` 처럼 변수 **이름**을 값으로 넣으면 잘못된 주소라 핑이 꺼집니다. |
+| `KEEP_ALIVE_RETRY_SECONDS` | `60` | 핑이 실패했을 때 다시 시도하는 간격(초) |
+
+> ⚠️ `KEEP_ALIVE_URL` 에 `RENDER_EXTERNAL_URL/api/ping` 을 그대로 넣으면
+> `[핑] 실패 · Failed to parse URL from RENDER_EXTERNAL_URL/api/ping` 로그가 남습니다.
+> 이때는 **환경변수를 삭제**하면 Render가 자동으로 넣어 주는 공개 주소를 사용합니다.
 
 **요금/한도 주의**
 
@@ -228,7 +233,8 @@ $env:SHOP_DB="D:\shop-data\shop.db"; node server.js
 
 | 증상 | 원인 / 해결 |
 | --- | --- |
-| `[핑] 실패` 로그 | 서버가 자기 주소로 핑을 보냈는데 닿지 않은 것입니다. **핑 실패만으로 서버가 꺼지지는 않습니다**(예외 가드 적용). 서비스가 실제로 내려갔다면 ① Free 플랜 월 750시간 소진 ② 15분 무요청 슬립 ③ 배포 실패를 확인하세요. |
+| `[핑] 실패 · Failed to parse URL from RENDER_EXTERNAL_URL/api/ping` | `KEEP_ALIVE_URL` 환경변수에 **주소가 아니라 변수 이름**을 넣은 경우입니다. 변수를 **삭제**하면 Render가 자동으로 넣어 주는 `RENDER_EXTERNAL_URL` 을 사용합니다. (이 로그 때문에 서버가 꺼지지는 않습니다) |
+| `[핑] 실패` (그 외) | 서버가 자기 주소로 핑을 보냈는데 닿지 않은 것입니다. **핑 실패만으로 서버가 꺼지지는 않습니다**(예외 가드 + 60초 재시도). 서비스가 실제로 내려갔다면 ① Free 플랜 월 750시간 소진 ② 15분 무요청 슬립 ③ 배포 실패를 확인하세요. |
 | 핑은 정상인데 사이트가 자주 꺼짐 | Free 플랜은 상시 가동 시 월 한도를 거의 다 씁니다. 한도를 넘으면 다음 달까지 정지 → **Starter** 로 전환하거나 `KEEP_ALIVE=0` 으로 두고 슬립을 허용하세요. |
 | Health check 실패로 배포 취소 | Health Check Path 가 **`/api/ping`** 인지 확인 (DB 를 읽지 않아 실패 확률이 낮습니다). |
 | `Cannot find module 'node:sqlite'` | Node 버전이 낮음 → `NODE_VERSION=24.22.1` 또는 `.node-version` 확인 |

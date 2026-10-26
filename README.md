@@ -46,10 +46,11 @@ SQLite 는 Persistent Disk(`/var/data/shop.db`)에 저장하도록 설정되어 
 지원하지 않아 재배포 시 데이터가 초기화됩니다. 절차·체크리스트·문제 해결은
 **[DEPLOY_RENDER.md](DEPLOY_RENDER.md)** 를 참고하세요.
 
-무료 플랜은 15분 무요청 시 슬립되는데, 이 앱은 `RENDER_EXTERNAL_URL` 이 있으면
-**5분마다 `/api/ping` 으로 자기 자신을 호출해 슬립을 막습니다**(`KEEP_ALIVE=0` 으로 해제,
-`KEEP_ALIVE_INTERVAL_SECONDS` 로 간격 변경). 핑이 실패해도 서버는 종료되지 않고
-5분에 한 번 로그만 남깁니다(`[핑] 실패 · 연속 N회`). Render 헬스체크 경로는 DB 를 읽지 않는
+무료 플랜은 15분 무요청 시 슬립되는데, 이 앱은 `RENDER_EXTERNAL_URL`(또는 `KEEP_ALIVE_URL`)이 있으면
+**5분마다 `/api/ping` 을 호출해 슬립을 막습니다**(`KEEP_ALIVE=0` 으로 해제,
+`KEEP_ALIVE_INTERVAL_SECONDS` 로 간격 변경). 공개 주소가 없으면 자기 자신(127.0.0.1)만 확인하고
+안내 로그를 남깁니다. 핑이 실패해도 서버는 종료되지 않으며 **60초 뒤 다시 시도**하고
+로그는 5분에 한 번만 남깁니다(`[핑] 실패 · 연속 N회`). Render 헬스체크 경로는 DB 를 읽지 않는
 `/api/ping` 입니다. DB 생성·마이그레이션·백업/복원 절차는 배포 가이드의 **6-1 절**을 참고하세요.
 
 ## 상품 상세 · 재고 메모
