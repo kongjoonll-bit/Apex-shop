@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const store = require('./db');
+const depositParser = require('./deposit-parser');
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -18,7 +19,11 @@ const HOST = process.env.HOST || '0.0.0.0';
 const MAX_BODY = 128 * 1024;
 const COOKIE_NAME = 'shop_admin';
 const COOKIE_USER = 'shop_user';
-const LOGIN_ONLY_SETTINGS = ['auto_confirm', 'auto_confirm_delay', 'auto_deliver', 'webhook_token'];
+const LOGIN_ONLY_SETTINGS = [
+  'auto_confirm', 'auto_confirm_delay', 'auto_deliver',
+  'deposit_expire_minutes', 'deposit_match_name', 'deposit_webhook_key',
+  'webhook_token'
+];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -202,6 +207,8 @@ function accountPayload(user) {
   return {
     user,
     orders: store.listUserOrders(user.id),
+    reviewable: store.listReviewableProducts(user.id),
+    myReviews: store.listUserReviews(user.id),
     automation: automationInfo()
   };
 }
@@ -214,6 +221,172 @@ function publicStorePayload() {
     reviews: store.listReviews(),
     games: store.availableGames()
   };
+}
+
+/* ────────────────────────────────────────────────────────────
+   입금 알림 웹훅 (Tasker / MacroDroid → 폰 은행 알림 자동 전송)
+   자판기 앱(Discord-Battle-Cat-Vending-Machine)과 같은 방식입니다.
+   - 인증: ?key=... 또는 헤더 X-Webhook-Key
+   - 수신: {"title": "...", "body": "...", "package": "..."} (JSON/form/순수텍스트 모두 허용)
+   - 처리: 금액 + 입금자명 파싱 → 입금대기 주문 매칭 → 즉시 지급
+   ──────────────────────────────────────────────────────────── */
+const DEPOSIT_LOG_LIMIT = 120;
+const DEPOSIT_DEDUP_MS = 60 * 1000;
+const depositLogs = [];
+const depositRecent = new Map();
+
+function recordDepositLog(level, message) {
+  const entry = { at: new Date().toISOString(), level: level, message: String(message || '').slice(0, 500) };
+  depositLogs.unshift(entry);
+  if (depositLogs.length > DEPOSIT_LOG_LIMIT) depositLogs.length = DEPOSIT_LOG_LIMIT;
+  const line = '[입금] ' + entry.message;
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+  return entry;
+}
+
+function depositKeyInfo() {
+  const key = store.getDepositWebhookKey();
+  const source = store.depositKeySource();
+  return {
+    key: key,
+    fingerprint: depositParser.keyFingerprint(key),
+    source: source,
+    fromEnv: source === 'env'
+  };
+}
+
+function checkDepositKey(rawKey) {
+  const expected = depositParser.normalizeKey(store.getDepositWebhookKey());
+  const provided = depositParser.normalizeKey(rawKey);
+  const detail = '받은키[길이=' + provided.length + ', 지문=' + depositParser.keyFingerprint(provided) +
+    ', 앞4=' + (provided.slice(0, 4) || '-') + '] / 서버키[길이=' + expected.length +
+    ', 지문=' + depositParser.keyFingerprint(expected) + ', 앞4=' + (expected.slice(0, 4) || '-') +
+    ', 출처=' + store.depositKeySource() + ']';
+  if (!expected || !provided || provided.length !== expected.length) return { ok: false, detail: detail };
+  return { ok: crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(provided, 'utf8')), detail: detail };
+}
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY) {
+        reject(new store.AppError(413, '요청 본문이 너무 큽니다.'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+/* Content-Type 헤더가 없어도 JSON → form → 순수 텍스트 순서로 최대한 수용합니다. */
+function parseWebhookPayload(raw, query) {
+  const text = String(raw || '').trim();
+  let json = null;
+  if (text) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) json = parsed;
+    } catch (err) {
+      json = null;
+    }
+  }
+  const form = (!json && text) ? new URLSearchParams(text) : new URLSearchParams();
+  const pick = (names) => {
+    for (let i = 0; i < names.length; i += 1) {
+      const name = names[i];
+      if (json && json[name] !== undefined && json[name] !== null && String(json[name]).trim()) {
+        return String(json[name]);
+      }
+      if (form.get(name)) return form.get(name);
+      if (query && query.get(name)) return query.get(name);
+    }
+    return '';
+  };
+  const title = pick(['title', 'titleText', 'ntitle']);
+  const body = pick(['body', 'text', 'message', 'content', 'ntext', 'msg']);
+  const pkg = pick(['package', 'package_name', 'app', 'pkg', 'napp']);
+  const plain = (!json && !title && !body && text) ? text : '';
+  return { title: title, body: body || plain, pkg: pkg };
+}
+
+/* 알림 1건 처리: 파싱 → 중복 방지 → 입금대기 주문 매칭 → 자동 지급 */
+function processDepositNotification(payload) {
+  const parsed = depositParser.parseNotification(payload.title, payload.body, payload.pkg);
+  recordDepositLog('info', '수신: ' + (payload.title || '-').slice(0, 40) + ' | ' + (payload.body || '-').slice(0, 80));
+  const base = { ok: true, deposit: false, parsed: parsed };
+  if (!parsed.text) return Object.assign(base, { reason: 'empty' });
+  if (!parsed.isDepositLike) return Object.assign(base, { reason: 'not-deposit' });
+  if (parsed.outgoing) return Object.assign(base, { reason: 'outgoing' });
+  if (!parsed.ok) return Object.assign(base, { reason: 'parse-failed' });
+
+  const dedupKey = parsed.text + '|' + parsed.amount + '|' + parsed.depositor;
+  const now = Date.now();
+  const last = depositRecent.get(dedupKey);
+  if (last && now - last < DEPOSIT_DEDUP_MS) {
+    return Object.assign(base, {
+      deposit: true, duplicate: true, reason: 'duplicate',
+      amount: parsed.amount, depositor: parsed.depositor
+    });
+  }
+  depositRecent.set(dedupKey, now);
+  if (depositRecent.size > 300) {
+    depositRecent.forEach((at, key) => {
+      if (now - at > DEPOSIT_DEDUP_MS * 2) depositRecent.delete(key);
+    });
+  }
+
+  const result = store.matchPendingDeposit({
+    amount: parsed.amount,
+    depositor: parsed.depositor,
+    text: parsed.text
+  });
+
+  if (result.order) {
+    const order = result.order;
+    recordDepositLog('match', '자동 지급 완료 · ' + parsed.amount.toLocaleString('ko-KR') + '원 / ' +
+      parsed.depositor + ' / 주문 ' + order.code);
+    return Object.assign(base, {
+      deposit: true,
+      matched: true,
+      reason: 'matched',
+      amount: parsed.amount,
+      depositor: parsed.depositor,
+      order: {
+        code: order.code,
+        total: order.total,
+        status: order.status,
+        statusLabel: order.statusLabel,
+        buyerName: order.buyerName
+      }
+    });
+  }
+
+  const reasonText = {
+    'no-amount': '금액 추출 실패',
+    'no-pending-amount': '금액이 일치하는 입금대기 주문 없음',
+    'depositor-mismatch': '금액은 맞지만 입금자명이 다른 주문만 있음',
+    ambiguous: '같은 금액의 입금대기 주문이 여러 건 → 수동 확인 필요'
+  }[result.reason] || result.reason;
+  recordDepositLog('warn', '미할당 입금 · ' + parsed.amount.toLocaleString('ko-KR') + '원 / ' +
+    parsed.depositor + ' · ' + reasonText);
+  return Object.assign(base, {
+    deposit: true,
+    matched: false,
+    amount: parsed.amount,
+    depositor: parsed.depositor,
+    reason: result.reason,
+    reasonText: reasonText,
+    candidates: result.candidates || 0,
+    candidateCodes: result.candidateCodes || []
+  });
 }
 
 /* ---------- public API ---------- */
@@ -262,6 +435,39 @@ async function handlePublicApi(req, res, pathname, query) {
   if (req.method === 'POST' && pathname === '/api/auth/logout') {
     store.deleteUserSession(parseCookies(req)[COOKIE_USER]);
     sendJson(res, 200, { ok: true }, { 'Set-Cookie': clearUserCookie(req) });
+    return true;
+  }
+
+  /* 폰(Tasker/MacroDroid) 알림 웹훅 — 자판기 앱과 동일한 자동입금확인 방식 */
+  if (pathname === '/api/hooks/deposit-notify' && (req.method === 'GET' || req.method === 'POST')) {
+    const rawKey = req.headers['x-webhook-key'] || req.headers['x-deposit-key'] || query.get('key') || '';
+    const auth = checkDepositKey(rawKey);
+    if (!auth.ok) {
+      recordDepositLog('error', '인증 실패 · ' + auth.detail + ' · IP ' + clientIp(req));
+      throw new store.AppError(403, '입금 웹훅 키가 올바르지 않습니다. ' + auth.detail);
+    }
+    if (req.method === 'GET') {
+      sendJson(res, 200, {
+        ok: true,
+        message: '입금 웹훅 연결 정상! 이 URL과 키를 Tasker/MacroDroid에 설정하세요.',
+        detail: auth.detail,
+        pending: store.listPendingDepositOrders(200).length,
+        time: new Date().toISOString()
+      });
+      return true;
+    }
+    const raw = await readRawBody(req);
+    const payload = parseWebhookPayload(raw, query);
+    if (!payload.title && !payload.body) throw new store.AppError(400, '알림 제목 또는 내용이 비어 있습니다.');
+    const unresolved = depositParser.detectTemplateVars(payload.title + ' ' + payload.body + ' ' + payload.pkg);
+    if (unresolved.length) {
+      const message = 'Tasker 변수가 치환되지 않았습니다: ' + unresolved.join(', ') +
+        ' → %evtprm1(제목) / %evtprm2(내용) / %evtprm3(앱) 을 사용하세요.';
+      recordDepositLog('error', message);
+      sendJson(res, 200, { ok: false, error: 'tasker_var_not_substituted', vars: unresolved, message: message });
+      return true;
+    }
+    sendJson(res, 200, processDepositNotification(payload));
     return true;
   }
 
@@ -347,6 +553,28 @@ async function handlePublicApi(req, res, pathname, query) {
     return true;
   }
 
+  /* 구매 인증 후기: 지급 완료된 주문의 상품에만 작성 가능 */
+  if (req.method === 'POST' && pathname === '/api/reviews') {
+    requireJsonContentType(req);
+    const user = requireUser(req);
+    const body = await readJson(req);
+    const review = store.createUserReview(user.id, body);
+    sendJson(res, 201, {
+      ok: true,
+      review,
+      reviewable: store.listReviewableProducts(user.id),
+      reviews: store.listReviews()
+    });
+    return true;
+  }
+
+  const userReviewMatch = pathname.match(/^\/api\/reviews\/(\d+)$/);
+  if (userReviewMatch && req.method === 'DELETE') {
+    const user = requireUser(req);
+    sendJson(res, 200, store.deleteUserReview(user.id, Number(userReviewMatch[1])));
+    return true;
+  }
+
   return false;
 }
 
@@ -404,7 +632,8 @@ async function handleAdminApi(req, res, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/admin/data') {
     const products = store.listProducts({ includeHidden: true });
-    const settings = store.getSettings();
+    const settings = Object.assign({}, store.getSettings());
+    delete settings.deposit_webhook_key;
     sendJson(res, 200, {
       products,
       orders: store.listOrders(200),
@@ -418,6 +647,13 @@ async function handleAdminApi(req, res, pathname) {
         path: '/api/hooks/deposit',
         token: settings.webhook_token || ''
       },
+      deposit: Object.assign({}, depositKeyInfo(), {
+        path: '/api/hooks/deposit-notify',
+        matchName: settings.deposit_match_name !== '0',
+        expireMinutes: Math.max(0, Number(settings.deposit_expire_minutes) || 0),
+        pending: store.listPendingDepositOrders(10),
+        logs: depositLogs.slice(0, 40)
+      }),
       games: Array.from(new Set(products.map((product) => product.game)))
     });
     return true;
@@ -538,6 +774,67 @@ async function handleAdminApi(req, res, pathname) {
     return true;
   }
 
+  /* 폰 알림 웹훅 진단: 파싱 + 매칭 시뮬레이션 (실제 지급 없음) */
+  if (req.method === 'POST' && pathname === '/api/admin/deposit/test') {
+    requireJsonContentType(req);
+    const body = await readJson(req);
+    const title = String(body.title || '').trim();
+    const message = String(body.body || body.text || '').trim();
+    if (!title && !message) throw new store.AppError(400, '알림 제목 또는 내용을 입력해 주세요.');
+    const unresolved = depositParser.detectTemplateVars(title + ' ' + message);
+    if (unresolved.length) {
+      sendJson(res, 200, {
+        ok: false,
+        message: 'Tasker 변수(' + unresolved.join(', ') + ')가 그대로 있습니다. 실제 알림 문구를 입력해 주세요.'
+      });
+      return true;
+    }
+    const parsed = depositParser.parseNotification(title, message);
+    const match = parsed.ok
+      ? store.matchPendingDeposit({ amount: parsed.amount, depositor: parsed.depositor, text: parsed.text }, { dryRun: true })
+      : null;
+    let hint;
+    if (!parsed.ok) {
+      hint = '❌ 알림에서 금액/입금자명을 추출하지 못했습니다. 알림 문구에 금액(원)과 입금자명이 함께 있어야 합니다.';
+    } else if (match && match.reason === 'would-match') {
+      hint = '✅ 실제 입금이라면 주문 ' + match.preview.code + '(' + match.preview.buyerName + ')에 자동 지급됩니다.';
+    } else if (match && match.reason === 'no-pending-amount') {
+      hint = '⚠️ 금액이 일치하는 입금대기 주문이 없습니다. 회원이 먼저 주문(입금대기)을 만들어야 합니다.';
+    } else if (match && match.reason === 'depositor-mismatch') {
+      hint = '⚠️ 금액은 맞지만 입금자명이 다른 주문만 있습니다. 주문서의 입금자명과 알림의 입금자명이 같아야 합니다.';
+    } else if (match && match.reason === 'ambiguous') {
+      hint = '⚠️ 같은 금액의 입금대기 주문이 여러 건이라 자동 지급하지 않습니다. 관리자가 직접 확인해 주세요.';
+    } else {
+      hint = '⚠️ 자동 지급 조건을 만족하지 않습니다.';
+    }
+    sendJson(res, 200, {
+      ok: true,
+      parsed: parsed,
+      match: match,
+      hint: hint,
+      pending: store.listPendingDepositOrders(10)
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/admin/deposit/logs') {
+    sendJson(res, 200, { ok: true, logs: depositLogs.slice(0, DEPOSIT_LOG_LIMIT) });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/admin/deposit/logs/clear') {
+    depositLogs.length = 0;
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/admin/deposit/key/rotate') {
+    const key = store.rotateDepositWebhookKey();
+    recordDepositLog('info', '웹훅 키를 재발급했습니다 (지문 ' + depositParser.keyFingerprint(key) + ')');
+    sendJson(res, 200, { ok: true, deposit: depositKeyInfo() });
+    return true;
+  }
+
   throw new store.AppError(404, '없는 관리자 API입니다.');
 }
 
@@ -623,6 +920,10 @@ function start(port, attempts) {
       console.log('공개 URL: ' + process.env.RENDER_EXTERNAL_URL);
     }
     console.log('DB 파일: ' + store.dbFile);
+    const hookInfo = depositKeyInfo();
+    console.log('입금 알림 웹훅: /api/hooks/deposit-notify (키 지문 ' + hookInfo.fingerprint +
+      ' · 출처 ' + hookInfo.source + ')');
+    console.log('  → 폰 Tasker/MacroDroid에 /admin [설정] 탭의 웹훅 URL을 그대로 붙여넣으세요.');
     lanAddresses().forEach((address) => {
       console.log('외부/같은 네트워크: http://' + address + ':' + port);
     });
@@ -657,6 +958,8 @@ setInterval(() => {
   try {
     const confirmed = store.autoConfirmDueOrders();
     if (confirmed > 0) console.log('[자동입금확인] ' + confirmed + '건 확인 · 자동지급 완료');
+    const expired = store.expirePendingDepositOrders();
+    if (expired > 0) console.log('[자동입금확인] 오래된 입금대기 ' + expired + '건 자동 취소');
   } catch (err) {
     console.error('[자동입금확인 오류]', err);
   }

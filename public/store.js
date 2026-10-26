@@ -17,6 +17,10 @@
     cart: [],
     user: null,
     orders: [],
+    reviewable: [],
+    myReviews: [],
+    reviewTarget: null,
+    reviewRating: 5,
     authMode: 'login',
     afterAuth: null,
     filter: { category: '전체', game: '전체' },
@@ -499,8 +503,11 @@
       const data = await api(path, { method: 'POST', body: { username, password, displayName } });
       state.user = data.user;
       state.orders = Array.isArray(data.orders) ? data.orders : [];
+      state.reviewable = Array.isArray(data.reviewable) ? data.reviewable : [];
+      state.myReviews = Array.isArray(data.myReviews) ? data.myReviews : [];
       applyUser();
       renderAccount();
+      renderReviews();
       closeModal('authBackdrop');
       toast(state.authMode === 'register' ? '환영합니다! 계정이 만들어졌습니다.' : '로그인했습니다.', 'ok');
       sparkleBurst(window.innerWidth / 2, window.innerHeight / 3);
@@ -530,7 +537,10 @@
     }
     state.user = null;
     state.orders = [];
+    state.reviewable = [];
+    state.myReviews = [];
     applyUser();
+    renderReviews();
     closeModal('accountBackdrop');
     toast('로그아웃했습니다.', 'ok');
   }
@@ -540,12 +550,17 @@
       const data = await api('/api/auth/me');
       state.user = data.user;
       state.orders = Array.isArray(data.orders) ? data.orders : [];
+      state.reviewable = Array.isArray(data.reviewable) ? data.reviewable : [];
+      state.myReviews = Array.isArray(data.myReviews) ? data.myReviews : [];
       state.automation = data.automation || state.automation;
     } catch (err) {
       state.user = null;
       state.orders = [];
+      state.reviewable = [];
+      state.myReviews = [];
     }
     applyUser();
+    renderReviews();
   }
   /* ---------- account / vault ---------- */
   function statusPill(order) {
@@ -560,10 +575,21 @@
       '<pre class="cred">' + esc(raw) + '</pre></div>';
   }
 
+  function reviewBadgeHtml(item, order) {
+    if (!item.productId || order.status !== 'delivered') return '';
+    const mine = (state.myReviews || []).find((review) => review.productId === item.productId);
+    if (mine) {
+      return '<span class="review-done"><svg class="ico"><use href="#i-check"/></svg>후기 완료</span>';
+    }
+    return '<button class="review-open" type="button" data-review-product="' + item.productId +
+      '" data-review-name="' + esc(item.name) + '">후기 작성</button>';
+  }
+
   function vaultOrderHtml(order) {
     const items = (order.items || []).map((item) =>
       '<div class="vault-item"><div class="vault-item-head"><span>' + esc(item.name) + ' × ' + item.qty + '</span>' +
-      '<strong>' + won(item.subtotal) + '</strong></div>' + credentialsHtml(item) + '</div>'
+      '<span class="vault-item-right"><strong>' + won(item.subtotal) + '</strong>' + reviewBadgeHtml(item, order) + '</span></div>' +
+      credentialsHtml(item) + '</div>'
     ).join('');
     const pending = order.status === 'pending';
     return '<article class="vault-order' + (pending ? ' is-pending' : '') + '">' +
@@ -643,6 +669,8 @@
       try {
         const data = await api('/api/auth/me');
         state.orders = Array.isArray(data.orders) ? data.orders : [];
+        state.reviewable = Array.isArray(data.reviewable) ? data.reviewable : [];
+        state.myReviews = Array.isArray(data.myReviews) ? data.myReviews : [];
         state.orders.forEach((order) => {
           if (previous[order.id] === 'pending' && order.status === 'delivered') {
             toast('입금 확인 완료 · 계정이 자동 지급되었습니다!', 'ok');
@@ -1013,17 +1041,28 @@
     const section = $('reviews');
     const list = $('reviewList');
     const avg = $('reviewAvg');
+    const writeBtn = $('reviewWriteBtn');
     if (!list) return;
+    const canWrite = (state.reviewable || []).length > 0;
+    if (writeBtn) writeBtn.hidden = !canWrite;
     const reviews = state.reviews.slice(0, 9);
-    if (!reviews.length) {
+    if (!reviews.length && !canWrite) {
       if (section) section.hidden = true;
       list.innerHTML = '';
       return;
     }
     if (section) section.hidden = false;
     if (avg) {
-      const mean = state.reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / state.reviews.length;
-      avg.innerHTML = '<span class="star is-on">★</span>' + mean.toFixed(1) + ' / 5 · 후기 ' + state.reviews.length + '건';
+      if (!state.reviews.length) {
+        avg.innerHTML = '아직 후기 없음';
+      } else {
+        const mean = state.reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / state.reviews.length;
+        avg.innerHTML = '<span class="star is-on">★</span>' + mean.toFixed(1) + ' / 5 · 후기 ' + state.reviews.length + '건';
+      }
+    }
+    if (!reviews.length) {
+      list.innerHTML = '<p class="review-empty">아직 등록된 후기가 없습니다. 구매하신 상품의 첫 후기를 남겨보세요!</p>';
+      return;
     }
     list.innerHTML = reviews.map((review) =>
       '<article class="review" data-reveal><div class="review-top">' + starsHtml(review.rating) +
@@ -1033,6 +1072,83 @@
       '<span>' + esc(review.author) + ' · ' + esc(shortDate(review.createdAt)) + '</span></div></article>'
     ).join('');
     initReveal();
+  }
+
+  function syncReviewStars() {
+    const buttons = document.querySelectorAll('#reviewStars [data-star]');
+    Array.prototype.forEach.call(buttons, (button) => {
+      const value = Number(button.getAttribute('data-star'));
+      button.classList.toggle('is-on', value <= state.reviewRating);
+      button.setAttribute('aria-checked', String(value === state.reviewRating));
+    });
+  }
+
+  function openReview(productId) {
+    if (!state.user) {
+      openAuth('login', () => openReview(productId));
+      return;
+    }
+    const items = state.reviewable || [];
+    if (!items.length) {
+      toast('후기를 작성할 수 있는 상품이 없습니다. 지급 완료 후 다시 시도해 주세요.', 'warn');
+      return;
+    }
+    const targetId = Number(productId);
+    state.reviewTarget = items.find((item) => item.productId === targetId) || items[0];
+    state.reviewRating = 5;
+    const nameEl = $('reviewProductName');
+    if (nameEl) nameEl.textContent = state.reviewTarget.productName + ' · ' + state.reviewTarget.orderCode;
+    const bodyEl = $('reviewBody');
+    if (bodyEl) bodyEl.value = '';
+    const errEl = $('reviewError');
+    if (errEl) {
+      errEl.hidden = true;
+      errEl.textContent = '';
+    }
+    syncReviewStars();
+    openModal('reviewBackdrop');
+    if (bodyEl) bodyEl.focus();
+  }
+
+  async function submitReview(event) {
+    if (event) event.preventDefault();
+    if (!state.reviewTarget) return;
+    const bodyEl = $('reviewBody');
+    const errEl = $('reviewError');
+    const button = $('reviewSubmit');
+    const body = String((bodyEl && bodyEl.value) || '').trim();
+    const fail = (message) => {
+      if (errEl) {
+        errEl.textContent = message;
+        errEl.hidden = false;
+      }
+      toast(message, 'error');
+    };
+    if (body.length < 5) {
+      fail('후기 내용을 5자 이상 입력해 주세요.');
+      return;
+    }
+    if (button) button.disabled = true;
+    try {
+      const data = await api('/api/reviews', {
+        method: 'POST',
+        body: { productId: state.reviewTarget.productId, rating: state.reviewRating, body: body }
+      });
+      state.reviewable = Array.isArray(data.reviewable) ? data.reviewable : [];
+      if (Array.isArray(data.reviews)) state.reviews = data.reviews;
+      if (data.review) state.myReviews = [data.review].concat(state.myReviews || []);
+      state.reviewTarget = null;
+      closeModal('reviewBackdrop');
+      renderReviews();
+      renderStats();
+      renderAccount();
+      toast('구매 인증 후기가 등록되었습니다. 감사합니다!', 'ok');
+      sparkleBurst(window.innerWidth / 2, 140);
+    } catch (err) {
+      fail(err.message);
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   /* ---------- data ---------- */
@@ -1146,6 +1262,19 @@
         return;
       }
 
+      const reviewTrigger = target.closest('[data-review-product]');
+      if (reviewTrigger) {
+        openReview(Number(reviewTrigger.getAttribute('data-review-product')));
+        return;
+      }
+
+      const reviewStar = target.closest('#reviewStars [data-star]');
+      if (reviewStar) {
+        state.reviewRating = Number(reviewStar.getAttribute('data-star')) || 5;
+        syncReviewStars();
+        return;
+      }
+
       const actionEl = target.closest('[data-action]');
       if (actionEl && !actionEl.hasAttribute('data-close')) {
         handleAction(actionEl.getAttribute('data-action'), actionEl);
@@ -1170,6 +1299,10 @@
 
     const accountButton = $('accountButton');
     if (accountButton) accountButton.addEventListener('click', openAccount);
+    const reviewWriteBtn = $('reviewWriteBtn');
+    if (reviewWriteBtn) reviewWriteBtn.addEventListener('click', () => openReview());
+    const reviewForm = $('reviewForm');
+    if (reviewForm) reviewForm.addEventListener('submit', submitReview);
     const accountShop = $('accountShopBtn');
     if (accountShop) accountShop.addEventListener('click', () => closeModal('accountBackdrop'));
     const accountLogout = $('accountLogout');

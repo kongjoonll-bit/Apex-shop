@@ -208,7 +208,12 @@
         <h2>구매 인증 후기</h2>
         <p class="sec-sub">실제로 구매한 분들이 남긴 후기입니다.</p>
       </div>
-      <span class="avg" id="reviewAvg"></span>
+      <div class="review-head-actions">
+        <span class="avg" id="reviewAvg"></span>
+        <button class="btn tiny primary" type="button" id="reviewWriteBtn" hidden>
+          <svg class="ico"><use href="#i-spark"/></svg><span>후기 작성</span>
+        </button>
+      </div>
     </div>
     <div class="review-grid" id="reviewList"></div>
   </section>
@@ -418,6 +423,36 @@
     </button>
     <div id="orderBody"></div>
     <div class="modal-foot" id="orderFoot"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="reviewBackdrop" hidden>
+  <div class="modal review-modal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+    <button class="modal-x" type="button" data-close="reviewBackdrop" aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+    <span class="eyebrow">Verified review</span>
+    <h2 id="reviewTitle">후기 작성</h2>
+    <p class="modal-lead">지급이 완료된 상품에만 후기를 남길 수 있습니다. 남긴 후기는 상점에 구매 인증으로 표시됩니다.</p>
+    <p class="review-modal-product" id="reviewProductName">-</p>
+    <form id="reviewForm" novalidate>
+      <div class="review-stars" id="reviewStars" role="radiogroup" aria-label="별점">
+        <button type="button" class="review-star is-on" data-star="1" role="radio" aria-checked="false" aria-label="1점">★</button>
+        <button type="button" class="review-star is-on" data-star="2" role="radio" aria-checked="false" aria-label="2점">★</button>
+        <button type="button" class="review-star is-on" data-star="3" role="radio" aria-checked="false" aria-label="3점">★</button>
+        <button type="button" class="review-star is-on" data-star="4" role="radio" aria-checked="false" aria-label="4점">★</button>
+        <button type="button" class="review-star is-on" data-star="5" role="radio" aria-checked="true" aria-label="5점">★</button>
+      </div>
+      <label class="field">
+        <span>후기 내용 <em class="opt">최대 300자</em></span>
+        <textarea id="reviewBody" rows="4" maxlength="300" placeholder="상품 상태나 지급 속도는 어떠셨나요? 5자 이상 적어주세요." required></textarea>
+      </label>
+      <p class="auth-error" id="reviewError" hidden></p>
+      <div class="modal-foot">
+        <button class="btn quiet" type="button" data-close="reviewBackdrop">취소</button>
+        <button class="btn primary" type="submit" id="reviewSubmit">후기 등록</button>
+      </div>
+    </form>
   </div>
 </div>
 

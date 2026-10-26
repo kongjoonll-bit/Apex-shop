@@ -1456,6 +1456,110 @@ textarea {
   white-space: pre;
 }
 
+/* ---------- 폰 알림 자동입금확인 ---------- */
+.deposit-box h3 {
+  margin-bottom: 6px;
+}
+
+.deposit-test {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.deposit-test .field-wide {
+  grid-column: 1 / -1;
+}
+
+.deposit-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3, #826d78);
+}
+
+.deposit-hint.ok {
+  color: #16794c;
+}
+
+.deposit-hint.warn {
+  color: #a35a00;
+}
+
+.deposit-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.deposit-log-head h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.deposit-log-head .form-actions {
+  margin: 0;
+}
+
+.deposit-log {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.deposit-log-item {
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(136, 19, 55, 0.1));
+  background: var(--surface-2, #fffafb);
+}
+
+.deposit-log-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deposit-log-item b {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3, #826d78);
+}
+
+.deposit-log-item span {
+  font-size: 12px;
+  color: #3d1c26;
+  overflow-wrap: anywhere;
+}
+
+.deposit-log-item.ok {
+  border-color: rgba(22, 121, 76, 0.25);
+  background: rgba(22, 121, 76, 0.06);
+}
+
+.deposit-log-item.warn {
+  border-color: rgba(163, 90, 0, 0.25);
+  background: rgba(163, 90, 0, 0.06);
+}
+
+.deposit-log-item.error {
+  border-color: rgba(190, 30, 45, 0.25);
+  background: rgba(190, 30, 45, 0.06);
+}
+
+@media (max-width: 760px) {
+  .deposit-test {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- 회원 ---------- */
 .user-thumb {
   display: grid;

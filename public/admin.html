@@ -224,6 +224,32 @@
         </div>
       </div>
 
+      <div class="box deposit-box">
+        <h3>폰 알림 자동입금확인 (Tasker 웹훅)</h3>
+        <p class="muted small">폰의 Tasker/MacroDroid가 은행·토스 입금 알림을 아래 주소로 보내면, <b>금액 + 입금자명</b>이 모두 일치하는 입금대기 주문을 자동 확인·지급합니다. 자판기 앱과 같은 방식이며, 키가 맞지 않으면 아무것도 지급되지 않습니다.</p>
+        <div class="webhook-row"><span>웹훅 URL</span><code id="depositUrl">-</code><button class="btn tiny ghost" id="depositUrlCopy" type="button">복사</button></div>
+        <div class="webhook-row"><span>키 상태</span><code id="depositKeyState">-</code><button class="btn tiny ghost" id="depositKeyRotate" type="button">키 재발급</button></div>
+        <p class="muted small">연결 테스트: <a id="depositPing" href="#" target="_blank" rel="noopener">웹훅 주소를 브라우저로 열기</a> — <code>{"ok":true}</code> 가 나오면 정상입니다.</p>
+        <div class="deposit-test">
+          <label class="field">알림 제목<input type="text" id="depositTestTitle" placeholder="[토스뱅크] 입금 알림"></label>
+          <label class="field field-wide">알림 내용<input type="text" id="depositTestBody" placeholder="입금 5,000원 홍길동 잔액 10,000원"></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn ghost" id="depositTestBtn" type="button">알림 테스트 (지급 없음)</button>
+        </div>
+        <p class="deposit-hint" id="depositTestHint"></p>
+        <div class="deposit-log-head">
+          <h4>입금 로그</h4>
+          <div class="form-actions">
+            <button class="btn tiny ghost" id="depositLogRefresh" type="button">새로고침</button>
+            <button class="btn tiny danger" id="depositLogClear" type="button">지우기</button>
+          </div>
+        </div>
+        <ul class="deposit-log" id="depositLog"></ul>
+        <p class="muted small">Tasker 예시: 프로필 → 이벤트 → 알림 → 앱(은행/토스) → 작업 → HTTP Request(POST)<br>
+          URL = 위 웹훅 URL · Body = <code>{"title":"%evtprm1","body":"%evtprm2","package":"%evtprm3"}</code></p>
+      </div>
+
       <div class="box backup-box">
         <h3>데이터베이스 백업</h3>
         <p class="muted small">주문·회원·재고가 담긴 SQLite 파일을 내려받습니다. Render 같은 클라우드에서는 배포/재시작 전에 백업해 두세요.</p>

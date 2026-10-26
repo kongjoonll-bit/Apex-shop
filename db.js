@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
+const depositParser = require('./deposit-parser');
 
 const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -105,7 +106,9 @@ CREATE TABLE IF NOT EXISTS reviews (
   body TEXT NOT NULL DEFAULT '',
   verified INTEGER NOT NULL DEFAULT 1,
   visible INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  user_id INTEGER,
+  order_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS restock_requests (
@@ -150,6 +153,15 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
   if (!columns.some((column) => column.name === 'user_id')) {
     db.exec('ALTER TABLE orders ADD COLUMN user_id INTEGER');
   }
+})();
+
+/* 기존 DB 호환: reviews 에 구매 인증용 user_id / order_id 컬럼 추가 */
+(function ensureReviewColumns() {
+  const names = db.prepare('PRAGMA table_info(reviews)').all().map((column) => column.name);
+  if (names.indexOf('user_id') === -1) db.exec('ALTER TABLE reviews ADD COLUMN user_id INTEGER');
+  if (names.indexOf('order_id') === -1) db.exec('ALTER TABLE reviews ADD COLUMN order_id INTEGER');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_product ON reviews(user_id, product_id) WHERE user_id IS NOT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id, visible)');
 })();
 
 db.exec(`
@@ -206,6 +218,9 @@ const DEFAULT_SETTINGS = {
   auto_confirm: '1',
   auto_confirm_delay: '5',
   auto_deliver: '1',
+  deposit_expire_minutes: '0',
+  deposit_match_name: '1',
+  deposit_webhook_key: '',
   webhook_token: ''
 };
 
@@ -230,6 +245,8 @@ function setSettings(patch) {
   Object.keys(patch || {}).forEach((key) => {
     if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) return;
     if (key === 'admin_password') return;
+    /* 웹훅 키는 관리자 화면의 전용 버튼(재발급)으로만 바꿉니다. */
+    if (key === 'deposit_webhook_key' || key === 'webhook_token') return;
     stmt.run(key, String(patch[key] === undefined || patch[key] === null ? '' : patch[key]));
   });
   return getSettings();
@@ -476,20 +493,28 @@ function getOrderByCode(code, email) {
 }
 
 /* ---------- reviews ---------- */
-function listReviews(options) {
+function mapReview(row, options) {
   const opts = options || {};
-  const where = opts.includeHidden ? '' : ' WHERE visible = 1';
-  return db.prepare('SELECT * FROM reviews' + where + ' ORDER BY id DESC LIMIT 100').all().map((row) => ({
+  return {
     id: row.id,
     productId: row.product_id,
     productName: row.product_name,
-    author: opts.includeHidden ? row.author : maskName(row.author),
+    author: opts.raw ? row.author : maskName(row.author),
     rating: row.rating,
     body: row.body,
     verified: !!row.verified,
     visible: !!row.visible,
-    createdAt: row.created_at
-  }));
+    createdAt: row.created_at,
+    orderId: row.order_id || null,
+    userId: opts.raw ? (row.user_id || null) : undefined
+  };
+}
+
+function listReviews(options) {
+  const opts = options || {};
+  const where = opts.includeHidden ? '' : ' WHERE visible = 1';
+  return db.prepare('SELECT * FROM reviews' + where + ' ORDER BY id DESC LIMIT 100').all()
+    .map((row) => mapReview(row, { raw: !!opts.includeHidden }));
 }
 
 function createReview(data) {
@@ -504,7 +529,69 @@ function createReview(data) {
     INSERT INTO reviews (product_id, product_name, author, rating, body, verified, visible, created_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, ?)
   `).run(productId, product ? product.name : String(data.productName || '').slice(0, 80), author, rating, body, data.verified === false ? 0 : 1, nowIso());
-  return listReviews({ includeHidden: true }).find((review) => review.id === Number(result.lastInsertRowid));
+  return mapReview(db.prepare('SELECT * FROM reviews WHERE id = ?').get(Number(result.lastInsertRowid)), { raw: true });
+}
+
+/* 내가 후기를 쓸 수 있는 상품 (지급 완료 + 아직 후기 없음) */
+function listReviewableProducts(userId) {
+  return db.prepare(`
+    SELECT oi.product_id AS product_id, oi.name AS product_name,
+           MAX(o.id) AS order_id, MAX(o.code) AS order_code, MAX(o.delivered_at) AS delivered_at
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.user_id = ? AND o.status = 'delivered' AND oi.product_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM reviews r WHERE r.user_id = ? AND r.product_id = oi.product_id
+      )
+    GROUP BY oi.product_id
+    ORDER BY order_id DESC
+  `).all(Number(userId), Number(userId)).map((row) => ({
+    productId: row.product_id,
+    productName: row.product_name,
+    orderId: row.order_id,
+    orderCode: row.order_code,
+    deliveredAt: row.delivered_at || null
+  }));
+}
+
+function listUserReviews(userId) {
+  return db.prepare('SELECT * FROM reviews WHERE user_id = ? ORDER BY id DESC LIMIT 100')
+    .all(Number(userId)).map((row) => mapReview(row, { raw: true }));
+}
+
+function createUserReview(userId, data) {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userId));
+  if (!user) throw new AppError(401, '로그인이 필요합니다.');
+  const productId = Number(data.productId);
+  if (!productId) throw new AppError(400, '후기를 작성할 상품을 선택해 주세요.');
+  const product = getProduct(productId);
+  if (!product) throw new AppError(404, '상품을 찾을 수 없습니다.');
+  const body = String(data.body || '').trim().slice(0, 300);
+  if (body.length < 5) throw new AppError(400, '후기 내용을 5자 이상 입력해 주세요.');
+  const rating = Math.min(5, Math.max(1, Math.round(Number(data.rating) || 5)));
+  const order = db.prepare(`
+    SELECT o.id, o.code
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.id
+    WHERE o.user_id = ? AND o.status = 'delivered' AND oi.product_id = ?
+    ORDER BY o.id DESC LIMIT 1
+  `).get(Number(userId), productId);
+  if (!order) throw new AppError(403, '지급 완료된 상품에만 후기를 작성할 수 있습니다.');
+  const duplicated = db.prepare('SELECT id FROM reviews WHERE user_id = ? AND product_id = ?')
+    .get(Number(userId), productId);
+  if (duplicated) throw new AppError(409, '이미 이 상품의 후기를 작성했습니다.');
+  const author = user.display_name || user.username;
+  const result = db.prepare(`
+    INSERT INTO reviews (product_id, product_name, author, rating, body, verified, visible, created_at, user_id, order_id)
+    VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?)
+  `).run(productId, product.name, author, rating, body, nowIso(), Number(userId), order.id);
+  return mapReview(db.prepare('SELECT * FROM reviews WHERE id = ?').get(Number(result.lastInsertRowid)), { raw: true });
+}
+
+function deleteUserReview(userId, id) {
+  const result = db.prepare('DELETE FROM reviews WHERE id = ? AND user_id = ?').run(Number(id), Number(userId));
+  if (!result.changes) throw new AppError(404, '후기를 찾을 수 없습니다.');
+  return { ok: true };
 }
 
 function toggleReview(id, visible) {
@@ -873,8 +960,18 @@ module.exports = {
   autoConfirmDueOrders,
   confirmDepositByCode,
   confirmDepositByAmount,
+  getDepositWebhookKey,
+  rotateDepositWebhookKey,
+  depositKeySource,
+  listPendingDepositOrders,
+  matchPendingDeposit,
+  expirePendingDepositOrders,
   listReviews,
   createReview,
+  listReviewableProducts,
+  listUserReviews,
+  createUserReview,
+  deleteUserReview,
   toggleReview,
   deleteReview,
   addRestockRequest,
@@ -1058,4 +1155,132 @@ function getUserOrderByCode(userId, code) {
     .get(Number(userId), String(code || '').trim().toUpperCase());
   return row ? mapOrder(row) : null;
 }
+
+/* ────────────────────────────────────────────────────────────
+   입금 알림 자동확인 (Tasker/MacroDroid 웹훅)
+   - 금액 + 입금자명이 모두 일치하는 입금대기 주문만 자동 확인합니다.
+   - 여러 건이 동시에 걸리면(금액 중복) 자동 지급하지 않고 관리자 확인으로 남깁니다.
+   ──────────────────────────────────────────────────────────── */
+function upsertSetting(key, value) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, String(value));
+}
+
+/** 웹훅 키 출처: 'env' → Render 환경변수, 'db' → DB 저장값, 'generated' → 아직 없음 */
+function depositKeySource() {
+  if (depositParser.normalizeKey(process.env.DEPOSIT_WEBHOOK_KEY || '')) return 'env';
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('deposit_webhook_key');
+  return row && row.value ? 'db' : 'generated';
+}
+
+/**
+ * 입금 웹훅 인증 키 조회.
+ * 우선순위: 환경변수(DEPOSIT_WEBHOOK_KEY) > DB 저장값 > 자동 생성.
+ * 환경변수를 지정하면 재배포/DB 초기화와 무관하게 항상 같은 키를 사용합니다.
+ */
+function getDepositWebhookKey() {
+  const envKey = depositParser.normalizeKey(process.env.DEPOSIT_WEBHOOK_KEY || '');
+  if (envKey) {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('deposit_webhook_key');
+    if (!row || row.value !== envKey) upsertSetting('deposit_webhook_key', envKey);
+    return envKey;
+  }
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('deposit_webhook_key');
+  if (row && row.value) return row.value;
+  const token = crypto.randomBytes(18).toString('hex');
+  upsertSetting('deposit_webhook_key', token);
+  return token;
+}
+
+/** 관리자 화면에서 키 재발급 (환경변수로 고정된 경우에는 불가) */
+function rotateDepositWebhookKey() {
+  if (depositParser.normalizeKey(process.env.DEPOSIT_WEBHOOK_KEY || '')) {
+    throw new AppError(409, 'DEPOSIT_WEBHOOK_KEY 환경변수가 설정되어 있어 서버에서 키를 바꿀 수 없습니다. Render 환경변수를 수정해 주세요.');
+  }
+  const token = crypto.randomBytes(18).toString('hex');
+  upsertSetting('deposit_webhook_key', token);
+  return token;
+}
+
+/** 입금대기 주문 목록 (관리자 진단용) */
+function listPendingDepositOrders(limit) {
+  return db.prepare(`
+    SELECT id, code, buyer_name, total, created_at
+    FROM orders WHERE status = 'pending'
+    ORDER BY id ASC LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map((row) => ({
+    id: row.id,
+    code: row.code,
+    buyerName: row.buyer_name,
+    total: row.total,
+    createdAt: row.created_at
+  }));
+}
+
+/**
+ * 입금 알림과 입금대기 주문을 매칭하고, 정확히 1건이면 자동 확인·지급합니다.
+ * @param {{amount:number, depositor?:string, text?:string}} payload
+ * @param {{dryRun?:boolean}} [options] dryRun=true 이면 지급 없이 매칭 결과만 돌려줍니다.
+ * @returns {{order:object|null, reason:string, amount:number, depositor:string, candidates?:number, candidateCodes?:string[]}}
+ */
+function matchPendingDeposit(payload, options) {
+  const dryRun = !!(options && options.dryRun);
+  const amount = Math.round(Number(payload && payload.amount) || 0);
+  const depositor = String((payload && payload.depositor) || '').trim();
+  const text = String((payload && payload.text) || '');
+  const base = { order: null, amount: amount, depositor: depositor };
+  if (amount <= 0) return Object.assign(base, { reason: 'no-amount' });
+
+  const rows = db.prepare(`
+    SELECT id, code, buyer_name, total, created_at
+    FROM orders WHERE status = 'pending' AND total = ?
+    ORDER BY id ASC
+  `).all(amount);
+  if (!rows.length) return Object.assign(base, { reason: 'no-pending-amount', candidates: 0 });
+
+  const settings = getSettings();
+  const requireName = settings.deposit_match_name !== '0';
+  const normalizedText = depositParser.normalizeName(text);
+  const matched = requireName
+    ? rows.filter((row) => depositParser.nameMatches(row.buyer_name, depositor, normalizedText))
+    : rows;
+
+  if (!matched.length) {
+    return Object.assign(base, { reason: 'depositor-mismatch', candidates: rows.length });
+  }
+  if (matched.length > 1) {
+    return Object.assign(base, {
+      reason: 'ambiguous',
+      candidates: matched.length,
+      candidateCodes: matched.map((row) => row.code)
+    });
+  }
+  if (dryRun) {
+    return Object.assign(base, {
+      reason: 'would-match',
+      candidates: 1,
+      preview: { code: matched[0].code, total: matched[0].total, buyerName: matched[0].buyer_name }
+    });
+  }
+  return Object.assign(base, { order: confirmOrderPayment(matched[0].id), reason: 'matched', candidates: 1 });
+}
+
+/** 설정한 시간(분)이 지난 입금대기 주문을 취소합니다. 0이면 사용 안 함. */
+function expirePendingDepositOrders() {
+  const minutes = Math.max(0, Number(getSettings().deposit_expire_minutes) || 0);
+  if (!minutes) return 0;
+  const cutoff = new Date(Date.now() - minutes * 60000).toISOString();
+  const rows = db.prepare("SELECT id FROM orders WHERE status = 'pending' AND created_at <= ?").all(cutoff);
+  let canceled = 0;
+  rows.forEach((row) => {
+    try {
+      setOrderStatus(row.id, 'canceled');
+      canceled += 1;
+    } catch (err) {
+      /* 이미 처리된 주문은 건너뜁니다. */
+    }
+  });
+  return canceled;
+}
+
 

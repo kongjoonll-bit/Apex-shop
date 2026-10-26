@@ -37,7 +37,9 @@
         { key: 'bank_holder', label: '예금주' },
         { key: 'auto_confirm', label: '자동입금확인', type: 'select', options: [['1', 'ON — 자동 확인'], ['0', 'OFF — 관리자 직접 확인']] },
         { key: 'auto_confirm_delay', label: '자동확인 지연 (분, 0=즉시)', type: 'number' },
-        { key: 'auto_deliver', label: '입금확인 즉시 자동지급', type: 'select', options: [['1', 'ON — 즉시 지급'], ['0', 'OFF — 지급완료 수동 처리']] }
+        { key: 'auto_deliver', label: '입금확인 즉시 자동지급', type: 'select', options: [['1', 'ON — 즉시 지급'], ['0', 'OFF — 지급완료 수동 처리']] },
+        { key: 'deposit_match_name', label: '입금자명까지 일치해야 자동지급', type: 'select', options: [['1', 'ON — 금액+입금자명 일치'], ['0', 'OFF — 금액만 일치']] },
+        { key: 'deposit_expire_minutes', label: '입금대기 자동취소 (분, 0=사용 안 함)', type: 'number' }
       ]
     },
     {
@@ -713,6 +715,7 @@
       '<div class="settings-grid">' + group.fields.map(fieldHtml).join('') + '</div></div>'
     ).join('');
     renderWebhook();
+    renderDepositHook();
   }
 
   function renderWebhook() {
@@ -730,6 +733,50 @@
         '  -H "x-deposit-token: ' + (token || 'TOKEN') + '" \\\n' +
         '  -d "{\\"code\\":\\"GS000000-XXXX\\"}"';
     }
+  }
+
+  function renderDepositHook() {
+    const info = state.data.deposit || {};
+    const path = info.path || '/api/hooks/deposit-notify';
+    const url = window.location.origin + path + '?key=' + encodeURIComponent(info.key || '');
+    const urlEl = $('depositUrl');
+    const stateEl = $('depositKeyState');
+    const ping = $('depositPing');
+    if (urlEl) urlEl.textContent = url;
+    if (ping) ping.href = url;
+    if (stateEl) {
+      const sourceLabel = info.source === 'env' ? '환경변수 고정' : (info.source === 'db' ? 'DB 저장' : '자동 생성');
+      stateEl.textContent = '지문 ' + (info.fingerprint || '-') + ' · ' + sourceLabel +
+        (info.matchName === false ? ' · 금액만 매칭' : ' · 금액+입금자명 매칭');
+    }
+    const rotate = $('depositKeyRotate');
+    if (rotate) {
+      rotate.disabled = !!info.fromEnv;
+      rotate.title = info.fromEnv ? 'Render 환경변수(DEPOSIT_WEBHOOK_KEY)로 고정되어 서버에서 바꿀 수 없습니다.' : '';
+    }
+    renderDepositLogs(info.logs || [], info.pending || []);
+  }
+
+  function depositLogClass(level) {
+    if (level === 'match') return 'ok';
+    if (level === 'warn') return 'warn';
+    if (level === 'error') return 'error';
+    return '';
+  }
+
+  function renderDepositLogs(logs, pending) {
+    const list = $('depositLog');
+    if (!list) return;
+    const pendingHtml = pending.length
+      ? '<li class="deposit-log-item"><div><b>입금대기 주문 ' + pending.length + '건</b><span>' +
+        pending.map((order) => esc(order.code) + ' · ' + won(order.total) + ' · ' + esc(order.buyerName)).join(' / ') +
+        '</span></div></li>'
+      : '<li class="deposit-log-item"><div><b>입금대기 주문 없음</b><span>회원이 주문을 만들면 여기에 표시됩니다.</span></div></li>';
+    const logHtml = logs.length
+      ? logs.map((entry) => '<li class="deposit-log-item ' + depositLogClass(entry.level) + '"><div>' +
+        '<b>' + esc(dateTime(entry.at)) + '</b><span>' + esc(entry.message) + '</span></div></li>').join('')
+      : '<li class="deposit-log-item"><div><b>로그 없음</b><span>폰 알림이 도착하면 이곳에 기록됩니다. (서버 재시작 시 초기화)</span></div></li>';
+    list.innerHTML = pendingHtml + logHtml;
   }
 
   async function submitSettings(form) {
@@ -888,6 +935,84 @@
       tokenCopy.addEventListener('click', () => {
         const token = $('webhookToken');
         if (token) copyText(token.textContent);
+      });
+    }
+
+    const depositUrlCopy = $('depositUrlCopy');
+    if (depositUrlCopy) {
+      depositUrlCopy.addEventListener('click', () => {
+        const url = $('depositUrl');
+        if (url) copyText(url.textContent);
+      });
+    }
+
+    const depositKeyRotate = $('depositKeyRotate');
+    if (depositKeyRotate) {
+      depositKeyRotate.addEventListener('click', async () => {
+        if (!window.confirm('웹훅 키를 재발급하면 폰에 저장한 URL이 즉시 무효가 됩니다. 계속할까요?')) return;
+        try {
+          await api('/api/admin/deposit/key/rotate', { method: 'POST' });
+          toast('웹훅 키를 재발급했습니다. 폰의 URL을 새로 복사해 주세요.', 'ok');
+          await loadData();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      });
+    }
+
+    const depositTestBtn = $('depositTestBtn');
+    if (depositTestBtn) {
+      depositTestBtn.addEventListener('click', async () => {
+        const title = $('depositTestTitle').value.trim();
+        const body = $('depositTestBody').value.trim();
+        const hint = $('depositTestHint');
+        if (!title && !body) {
+          toast('알림 제목 또는 내용을 입력해 주세요.', 'warn');
+          return;
+        }
+        depositTestBtn.disabled = true;
+        try {
+          const result = await api('/api/admin/deposit/test', { method: 'POST', body: { title: title, body: body } });
+          if (!result.ok) {
+            hint.textContent = result.message || '테스트에 실패했습니다.';
+            hint.className = 'deposit-hint warn';
+            return;
+          }
+          const parsed = result.parsed || {};
+          hint.textContent = result.hint + (parsed.ok ? ' (금액 ' + won(parsed.amount) + ' · 입금자 ' + parsed.depositor + ')' : '');
+          hint.className = 'deposit-hint ' + (result.match && result.match.reason === 'would-match' ? 'ok' : 'warn');
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          depositTestBtn.disabled = false;
+        }
+      });
+    }
+
+    const depositLogRefresh = $('depositLogRefresh');
+    if (depositLogRefresh) {
+      depositLogRefresh.addEventListener('click', async () => {
+        try {
+          const result = await api('/api/admin/deposit/logs');
+          if (state.data.deposit) state.data.deposit.logs = result.logs || [];
+          renderDepositLogs(result.logs || [], (state.data.deposit && state.data.deposit.pending) || []);
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      });
+    }
+
+    const depositLogClear = $('depositLogClear');
+    if (depositLogClear) {
+      depositLogClear.addEventListener('click', async () => {
+        try {
+          await api('/api/admin/deposit/logs/clear', { method: 'POST' });
+          if (state.data.deposit) state.data.deposit.logs = [];
+          renderDepositLogs([], (state.data.deposit && state.data.deposit.pending) || []);
+          toast('입금 로그를 지웠습니다.', 'ok');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
       });
     }
 

@@ -25,6 +25,9 @@ services:
       # (끄려면 0, 간격 변경은 KEEP_ALIVE_INTERVAL_SECONDS)
       - key: KEEP_ALIVE
         value: "1"
+      # 폰 알림 웹훅 키 고정(선택). 값을 넣으면 DB 가 초기화돼도 키가 유지됩니다.
+      # - key: DEPOSIT_WEBHOOK_KEY
+      #   sync: false
     disk:
       name: apex-shop-data
       mountPath: /var/data

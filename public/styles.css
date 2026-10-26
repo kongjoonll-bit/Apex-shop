@@ -1584,6 +1584,96 @@ svg {
   color: var(--ink-3);
 }
 
+/* 구매 인증 후기 작성 */
+.review-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-head-actions .btn {
+  white-space: nowrap;
+}
+
+.vault-item-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-open {
+  padding: 4px 9px;
+  border: 1px solid var(--rose-100);
+  border-radius: 8px;
+  background: var(--rose-50);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--rose-700);
+  transition: 0.15s var(--ease);
+}
+
+.review-open:hover {
+  border-color: rgba(244, 63, 94, 0.34);
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.review-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--rose-700);
+}
+
+.review-done .ico {
+  font-size: 11px;
+}
+
+.review-modal {
+  width: min(460px, 100%);
+}
+
+.review-modal-product {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 12px;
+  background: var(--rose-50);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.review-stars {
+  display: flex;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.review-star {
+  padding: 2px 4px;
+  font-size: 26px;
+  line-height: 1;
+  color: #e8d7dd;
+  transition: 0.15s var(--ease);
+}
+
+.review-star.is-on {
+  color: #f59e0b;
+}
+
+.review-star:hover {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.review-modal textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
 /* ---------- guide ---------- */
 .guide {
   padding-top: clamp(34px, 5vw, 58px);
